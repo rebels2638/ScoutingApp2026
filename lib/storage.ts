@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { errorWithError } from './error-utils';
-import type { PitScoutingEntry, ScoutingEntry } from './types';
+import type { PitScoutingEntry, ScoutingEntry, ScoutingEntrySyncStatus } from './types';
 
 const SCOUTING_ENTRIES_KEY = '@agath_scouting_entries';
 const PIT_SCOUTING_ENTRIES_KEY = '@agath_pit_scouting_entries';
@@ -16,8 +16,41 @@ function isFiniteNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isNullableFiniteNumber(value: unknown): value is number | null {
+    return value === null || isFiniteNumber(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+    return value === null || typeof value === 'string';
+}
+
+function isNullableBoolean(value: unknown): value is boolean | null {
+    return value === null || typeof value === 'boolean';
+}
+
+function isScoutingEntrySyncStatus(value: unknown): value is ScoutingEntrySyncStatus {
+    return value === 'local' || value === 'queued' || value === 'synced';
+}
+
+function normalizeScoutingEntry(entry: ScoutingEntry): ScoutingEntry {
+    const syncStatus = isScoutingEntrySyncStatus(entry.syncStatus) ? entry.syncStatus : 'local';
+    const syncedAt = syncStatus === 'synced' && isFiniteNumber(entry.syncedAt) ? entry.syncedAt : null;
+
+    return {
+        ...entry,
+        syncStatus,
+        syncedAt,
+    };
+}
+
 function isScoutingEntry(value: unknown): value is ScoutingEntry {
-    if (!isRecord(value) || typeof value.id !== 'string' || !isFiniteNumber(value.timestamp)) {
+    if (
+        !isRecord(value) ||
+        typeof value.id !== 'string' ||
+        !isFiniteNumber(value.timestamp) ||
+        (value.syncStatus !== undefined && !isScoutingEntrySyncStatus(value.syncStatus)) ||
+        (value.syncedAt !== undefined && !isNullableFiniteNumber(value.syncedAt))
+    ) {
         return false;
     }
 
@@ -35,7 +68,7 @@ function isScoutingEntry(value: unknown): value is ScoutingEntry {
         isFiniteNumber(matchMetadata.teamNumber) &&
         typeof matchMetadata.allianceColor === 'string' &&
         isRecord(autonomous) &&
-        isFiniteNumber(autonomous.preloadCount) &&
+        isNullableFiniteNumber(autonomous.preloadCount) &&
         typeof autonomous.leftStartingLine === 'boolean' &&
         typeof autonomous.crossedCenterLine === 'boolean' &&
         typeof autonomous.fuelScoredBucket === 'string' &&
@@ -44,9 +77,9 @@ function isScoutingEntry(value: unknown): value is ScoutingEntry {
         isRecord(teleop) &&
         isFiniteNumber(teleop.scoringCyclesActive) &&
         isFiniteNumber(teleop.wastedCyclesInactive) &&
-        typeof teleop.typicalFuelCarried === 'string' &&
-        typeof teleop.primaryFuelSource === 'string' &&
-        typeof teleop.usesTrenchRoutes === 'boolean' &&
+        isNullableString(teleop.typicalFuelCarried) &&
+        isNullableString(teleop.primaryFuelSource) &&
+        isNullableBoolean(teleop.usesTrenchRoutes) &&
         typeof teleop.playsDefense === 'boolean' &&
         isRecord(activePhase) &&
         typeof activePhase.feedsFuelToAllianceZone === 'boolean' &&
@@ -112,7 +145,7 @@ function parseStoredEntries<T>(
 export async function saveScoutingEntry(entry: ScoutingEntry): Promise<void> {
     try {
         const existingData = await getScoutingEntries();
-        const updatedData = [...existingData, entry];
+        const updatedData = [...existingData, normalizeScoutingEntry(entry)];
         await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
     } catch (error) {
         errorWithError('Error saving scouting entry', error);
@@ -123,10 +156,20 @@ export async function saveScoutingEntry(entry: ScoutingEntry): Promise<void> {
 export async function getScoutingEntries(): Promise<ScoutingEntry[]> {
     try {
         const data = await AsyncStorage.getItem(SCOUTING_ENTRIES_KEY);
-        return parseStoredEntries(data, isScoutingEntry, 'scouting entries');
+        return parseStoredEntries(data, isScoutingEntry, 'scouting entries').map(normalizeScoutingEntry);
     } catch (error) {
         errorWithError('Error getting scouting entries', error);
         return [];
+    }
+}
+
+export async function getScoutingEntryById(id: string): Promise<ScoutingEntry | null> {
+    try {
+        const entries = await getScoutingEntries();
+        return entries.find((entry) => entry.id === id) ?? null;
+    } catch (error) {
+        errorWithError('Error getting scouting entry by id', error);
+        return null;
     }
 }
 
@@ -144,12 +187,56 @@ export async function deleteScoutingEntry(id: string): Promise<void> {
 export async function updateScoutingEntry(updatedEntry: ScoutingEntry): Promise<void> {
     try {
         const existingData = await getScoutingEntries();
+        const normalizedEntry = normalizeScoutingEntry(updatedEntry);
         const updatedData = existingData.map((entry) =>
-            entry.id === updatedEntry.id ? updatedEntry : entry
+            entry.id === normalizedEntry.id ? normalizedEntry : entry
         );
         await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
     } catch (error) {
         errorWithError('Error updating scouting entry', error);
+        throw error;
+    }
+}
+
+export async function upsertScoutingEntry(entry: ScoutingEntry): Promise<'created' | 'updated'> {
+    try {
+        const existingData = await getScoutingEntries();
+        const normalizedEntry = normalizeScoutingEntry(entry);
+        const hasExistingEntry = existingData.some((existingEntry) => existingEntry.id === normalizedEntry.id);
+        const updatedData = hasExistingEntry
+            ? existingData.map((existingEntry) =>
+                existingEntry.id === normalizedEntry.id ? normalizedEntry : existingEntry
+            )
+            : [...existingData, normalizedEntry];
+
+        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+        return hasExistingEntry ? 'updated' : 'created';
+    } catch (error) {
+        errorWithError('Error upserting scouting entry', error);
+        throw error;
+    }
+}
+
+export async function setScoutingEntrySyncStatus(
+    id: string,
+    syncStatus: ScoutingEntrySyncStatus,
+    syncedAt?: number | null
+): Promise<void> {
+    try {
+        const existingData = await getScoutingEntries();
+        const nextSyncedAt = syncStatus === 'synced' ? syncedAt ?? Date.now() : null;
+        const updatedData = existingData.map((entry) =>
+            entry.id === id
+                ? normalizeScoutingEntry({
+                    ...entry,
+                    syncStatus,
+                    syncedAt: nextSyncedAt,
+                })
+                : entry
+        );
+        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+    } catch (error) {
+        errorWithError('Error updating scouting entry sync status', error);
         throw error;
     }
 }

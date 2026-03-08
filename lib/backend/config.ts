@@ -8,6 +8,7 @@ type AppwritePublicEnvKey =
     | 'EXPO_PUBLIC_APPWRITE_DATABASE_ID'
     | 'EXPO_PUBLIC_APPWRITE_COLLECTION_ASSIGNMENTS_ID'
     | 'EXPO_PUBLIC_APPWRITE_COLLECTION_SCOUTING_DATA_ID'
+    | 'EXPO_PUBLIC_APPWRITE_COLLECTION_PIT_SCOUTING_ID'
     | 'EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID'
     | 'EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID';
 
@@ -18,6 +19,7 @@ export interface BackendConfig {
     databaseId: string;
     collectionAssignmentsId: string;
     collectionScoutingDataId: string;
+    collectionPitScoutingId: string | null;
     functionValidateKeyId: string;
     functionSubmitScoutingId: string;
 }
@@ -55,6 +57,20 @@ function getRequiredIdentifier(key: AppwritePublicEnvKey): string {
     return value;
 }
 
+function getOptionalIdentifier(key: AppwritePublicEnvKey): string | null {
+    const value = process.env[key];
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || PLACEHOLDER_PATTERN.test(trimmed) || !APPWRITE_ID_PATTERN.test(trimmed)) {
+        return null;
+    }
+
+    return trimmed;
+}
+
 function getRequiredEndpoint(key: AppwritePublicEnvKey): string {
     let endpoint: URL;
 
@@ -89,6 +105,7 @@ function resolveBackendConfig(): BackendConfig {
         databaseId: getRequiredIdentifier('EXPO_PUBLIC_APPWRITE_DATABASE_ID'),
         collectionAssignmentsId: getRequiredIdentifier('EXPO_PUBLIC_APPWRITE_COLLECTION_ASSIGNMENTS_ID'),
         collectionScoutingDataId: getRequiredIdentifier('EXPO_PUBLIC_APPWRITE_COLLECTION_SCOUTING_DATA_ID'),
+        collectionPitScoutingId: getOptionalIdentifier('EXPO_PUBLIC_APPWRITE_COLLECTION_PIT_SCOUTING_ID'),
         functionValidateKeyId: getRequiredIdentifier('EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID'),
         functionSubmitScoutingId: getRequiredIdentifier('EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID'),
     };

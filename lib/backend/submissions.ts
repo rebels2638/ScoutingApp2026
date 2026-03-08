@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { warnWithError } from '../error-utils';
-import type { ScoutingEntry } from '../types';
+import { getScoutingEntryById, setScoutingEntrySyncStatus } from '../storage';
+import type { ScoutingEntry, ScoutingEntrySyncStatus } from '../types';
 import { getAppwriteFunctions } from './client';
 import { requireBackendConfig } from './config';
 import { getInstallUuid } from './device';
@@ -34,7 +35,7 @@ interface SubmitScoutingEntryWithQueueParams {
 }
 
 export interface SubmitScoutingEntryWithQueueResult {
-    status: 'uploaded' | 'queued' | 'failed';
+    status: 'uploaded' | 'queued' | 'failed' | 'skipped';
 }
 
 export interface FlushQueuedScoutingSubmissionsResult {
@@ -45,6 +46,21 @@ export interface FlushQueuedScoutingSubmissionsResult {
 
 function isRecord(value: unknown): value is UnknownRecord {
     return typeof value === 'object' && value !== null;
+}
+
+function getScoutingEntrySyncStatus(entry: ScoutingEntry | null): ScoutingEntrySyncStatus {
+    return entry?.syncStatus ?? 'local';
+}
+
+async function persistScoutingEntrySyncStatus(
+    localEntryId: string,
+    syncStatus: ScoutingEntrySyncStatus
+): Promise<void> {
+    try {
+        await setScoutingEntrySyncStatus(localEntryId, syncStatus);
+    } catch (error) {
+        warnWithError('Failed to persist scouting entry sync status', error);
+    }
 }
 
 function isQueuedScoutingSubmission(value: unknown): value is QueuedScoutingSubmission {
@@ -112,6 +128,20 @@ async function removeSubmissionFromQueue(localEntryId: string): Promise<void> {
     }
 }
 
+export async function removeQueuedScoutingSubmissions(localEntryIds: string[]): Promise<void> {
+    if (localEntryIds.length === 0) {
+        return;
+    }
+
+    const entryIdSet = new Set(localEntryIds);
+    const queue = await readSubmissionQueue();
+    const nextQueue = queue.filter((queuedSubmission) => !entryIdSet.has(queuedSubmission.local_entry_id));
+
+    if (nextQueue.length !== queue.length) {
+        await writeSubmissionQueue(nextQueue);
+    }
+}
+
 async function enqueueSubmission(payload: ScoutingSubmissionPayload): Promise<void> {
     const queue = await readSubmissionQueue();
     const dedupedQueue = queue.filter(
@@ -170,19 +200,38 @@ async function buildScoutingSubmissionPayload({
 export async function submitScoutingEntryWithQueue(
     params: SubmitScoutingEntryWithQueueParams
 ): Promise<SubmitScoutingEntryWithQueueResult> {
-    const payload = await buildScoutingSubmissionPayload(params);
+    const storedEntry = await getScoutingEntryById(params.entry.id);
+    const nextEntry = storedEntry ?? params.entry;
+    const nextEntryStatus = getScoutingEntrySyncStatus(nextEntry);
+    if (nextEntryStatus === 'queued' || nextEntryStatus === 'synced') {
+        return { status: 'skipped' };
+    }
+
+    const queue = await readSubmissionQueue();
+    if (queue.some((queuedSubmission) => queuedSubmission.local_entry_id === nextEntry.id)) {
+        await persistScoutingEntrySyncStatus(nextEntry.id, 'queued');
+        return { status: 'skipped' };
+    }
+
+    const payload = await buildScoutingSubmissionPayload({
+        ...params,
+        entry: nextEntry,
+    });
 
     try {
         await executeSubmission(payload);
         await removeSubmissionFromQueue(payload.local_entry_id);
+        await persistScoutingEntrySyncStatus(payload.local_entry_id, 'synced');
         return { status: 'uploaded' };
     } catch (submissionError) {
         warnWithError('Failed to submit scouting entry to backend, queuing for retry', submissionError);
         try {
             await enqueueSubmission(payload);
+            await persistScoutingEntrySyncStatus(payload.local_entry_id, 'queued');
             return { status: 'queued' };
         } catch (queueError) {
             warnWithError('Failed to queue scouting entry for retry', queueError);
+            await persistScoutingEntrySyncStatus(payload.local_entry_id, 'local');
             return { status: 'failed' };
         }
     }
@@ -200,6 +249,7 @@ export async function flushQueuedScoutingSubmissions(): Promise<FlushQueuedScout
     for (const queuedSubmission of queue) {
         try {
             await executeSubmission(queuedSubmission.payload);
+            await persistScoutingEntrySyncStatus(queuedSubmission.payload.local_entry_id, 'synced');
             uploadedCount += 1;
         } catch (submissionError) {
             warnWithError('Failed to flush queued scouting submission', submissionError);

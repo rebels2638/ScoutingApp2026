@@ -1,13 +1,15 @@
+import * as React from 'react';
+
 import { FormField, FormSection, FormToggleField } from '@/components/ui/FormField';
 import { Select } from '@/components/ui/Select';
 import { Stepper } from '@/components/ui/Stepper';
 import { autonomousDefinitions } from '@/lib/definitions';
 import type { AutoClimbResult, AutonomousData, FuelScoredBucket } from '@/lib/types';
-import * as React from 'react';
 
 interface AutonomousSectionProps {
     data: AutonomousData;
     onChange: (data: AutonomousData) => void;
+    showPitManagedFields?: boolean;
 }
 
 const fuelScoredOptions = [
@@ -26,23 +28,26 @@ const climbResultOptions = [
 export const AutonomousSection: React.FC<AutonomousSectionProps> = ({
     data,
     onChange,
+    showPitManagedFields = true,
 }) => {
     return (
         <FormSection
             title="Autonomous (20s)"
             subtitle="The first 20 seconds of the match"
         >
-            <FormField
-                label="Preload Count"
-                definition={autonomousDefinitions.preloadCount}
-            >
-                <Stepper
-                    value={data.preloadCount}
-                    onValueChange={(value) => onChange({ ...data, preloadCount: value })}
-                    min={0}
-                    max={8}
-                />
-            </FormField>
+            {showPitManagedFields ? (
+                <FormField
+                    label="Preload Count"
+                    definition={autonomousDefinitions.preloadCount}
+                >
+                    <Stepper
+                        value={data.preloadCount ?? 0}
+                        onValueChange={(value) => onChange({ ...data, preloadCount: value })}
+                        min={0}
+                        max={8}
+                    />
+                </FormField>
+            ) : null}
 
             <FormToggleField
                 label="Taxis"

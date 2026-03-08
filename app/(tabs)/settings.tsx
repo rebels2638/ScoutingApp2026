@@ -16,7 +16,7 @@ import {
 } from '@/lib/ui-scale';
 import { Check, FlaskConical, Moon, Smartphone, Sun } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarMetrics } from './_layout';
 
@@ -188,7 +188,7 @@ function BackendConnectionCard() {
                 ) : isAuthenticated ? (
                     <>
                         <CardDescription>
-                            Backend mode is enabled for syncing uploads and receiving assignments. Turn it off anytime to go back to local scouting.
+                            Backend mode is enabled for receiving assignments and syncing entries you explicitly queue from the Data tab.
                         </CardDescription>
                         <Button
                             variant="secondary"
@@ -197,7 +197,7 @@ function BackendConnectionCard() {
                                 void handleSyncNow();
                             }}
                         >
-                            {isSyncing ? 'Syncing...' : 'Sync now'}
+                            {isSyncing ? 'Syncing...' : 'Sync queued uploads'}
                         </Button>
                         <Button
                             variant="destructive"
@@ -339,134 +339,140 @@ export default function SettingsScreen() {
     const bottomPadding = tabBarHeight + Math.max(insets.bottom, tabBarMarginBottom) + 16;
 
     return (
-        <ThemedScrollView
-            contentContainerStyle={{
-                paddingTop: insets.top + 16,
-                paddingBottom: bottomPadding,
-                paddingHorizontal: 16,
-                gap: 16,
-            }}
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>
-                        <View className="flex-row items-center gap-2">
-                            <Smartphone size={18} color={theme.colors.mutedForeground} />
-                            <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">UI Scale</Text>
-                        </View>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <View className="flex-row gap-2">
-                        {scaleOptions.map((option) => {
-                            const isSelected = scaleOption === option;
-                            return (
-                                <Pressable
-                                    key={option}
-                                    onPress={() => setScaleOption(option)}
-                                    className="flex-1"
-                                >
-                                    <View
-                                        style={{
-                                            backgroundColor: isSelected ? theme.colors.primary : theme.colors.secondary,
-                                            borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                                        }}
-                                        className="items-center justify-center rounded-lg border py-3"
+            <ThemedScrollView
+                contentContainerStyle={{
+                    paddingTop: insets.top + 16,
+                    paddingBottom: bottomPadding,
+                    paddingHorizontal: 16,
+                    gap: 16,
+                }}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
+                <Card>
+                    <CardHeader>
+                        <CardTitle>
+                            <View className="flex-row items-center gap-2">
+                                <Smartphone size={18} color={theme.colors.mutedForeground} />
+                                <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">UI Scale</Text>
+                            </View>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <View className="flex-row gap-2">
+                            {scaleOptions.map((option) => {
+                                const isSelected = scaleOption === option;
+                                return (
+                                    <Pressable
+                                        key={option}
+                                        onPress={() => setScaleOption(option)}
+                                        className="flex-1"
                                     >
-                                        <Text
+                                        <View
                                             style={{
-                                                color: isSelected ? theme.colors.primaryForeground : theme.colors.foreground,
-                                                fontSize: 13,
+                                                backgroundColor: isSelected ? theme.colors.primary : theme.colors.secondary,
+                                                borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                                             }}
-                                            className="font-medium"
+                                            className="items-center justify-center rounded-lg border py-3"
                                         >
-                                            {UI_SCALE_LABELS[option]}
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                color: isSelected ? theme.colors.primaryForeground : theme.colors.mutedForeground,
-                                                fontSize: 11,
-                                                opacity: 0.8,
-                                            }}
-                                        >
-                                            {Math.round(UI_SCALE_VALUES[option] * 100)}%
-                                        </Text>
-                                    </View>
-                                </Pressable>
-                            );
-                        })}
-                    </View>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>
-                        <View className="flex-row items-center gap-2">
-                            <Moon size={18} color={theme.colors.mutedForeground} />
-                            <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">Dark Themes</Text>
+                                            <Text
+                                                style={{
+                                                    color: isSelected ? theme.colors.primaryForeground : theme.colors.foreground,
+                                                    fontSize: 13,
+                                                }}
+                                                className="font-medium"
+                                            >
+                                                {UI_SCALE_LABELS[option]}
+                                            </Text>
+                                            <Text
+                                                style={{
+                                                    color: isSelected ? theme.colors.primaryForeground : theme.colors.mutedForeground,
+                                                    fontSize: 11,
+                                                    opacity: 0.8,
+                                                }}
+                                            >
+                                                {Math.round(UI_SCALE_VALUES[option] * 100)}%
+                                            </Text>
+                                        </View>
+                                    </Pressable>
+                                );
+                            })}
                         </View>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <View className="flex-row flex-wrap gap-3">
-                        {darkThemes.map(([key, t]) => (
-                            <ThemeCard
-                                key={key}
-                                themeKey={key}
-                                themeName={t.name}
-                                isSelected={themeName === key}
-                                isDark={t.isDark}
-                                colors={{
-                                    background: t.colors.background,
-                                    foreground: t.colors.foreground,
-                                    primary: t.colors.primary,
-                                    secondary: t.colors.secondary,
-                                    accent: t.colors.accent,
-                                }}
-                                onSelect={() => setTheme(key)}
-                            />
-                        ))}
-                    </View>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>
-                        <View className="flex-row items-center gap-2">
-                            <Sun size={18} color={theme.colors.mutedForeground} />
-                            <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">Light Themes</Text>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>
+                            <View className="flex-row items-center gap-2">
+                                <Moon size={18} color={theme.colors.mutedForeground} />
+                                <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">Dark Themes</Text>
+                            </View>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <View className="flex-row flex-wrap gap-3">
+                            {darkThemes.map(([key, t]) => (
+                                <ThemeCard
+                                    key={key}
+                                    themeKey={key}
+                                    themeName={t.name}
+                                    isSelected={themeName === key}
+                                    isDark={t.isDark}
+                                    colors={{
+                                        background: t.colors.background,
+                                        foreground: t.colors.foreground,
+                                        primary: t.colors.primary,
+                                        secondary: t.colors.secondary,
+                                        accent: t.colors.accent,
+                                    }}
+                                    onSelect={() => setTheme(key)}
+                                />
+                            ))}
                         </View>
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <View className="flex-row flex-wrap gap-3">
-                        {lightThemes.map(([key, t]) => (
-                            <ThemeCard
-                                key={key}
-                                themeKey={key}
-                                themeName={t.name}
-                                isSelected={themeName === key}
-                                isDark={t.isDark}
-                                colors={{
-                                    background: t.colors.background,
-                                    foreground: t.colors.foreground,
-                                    primary: t.colors.primary,
-                                    secondary: t.colors.secondary,
-                                    accent: t.colors.accent,
-                                }}
-                                onSelect={() => setTheme(key)}
-                            />
-                        ))}
-                    </View>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
 
-            <BackendConnectionCard />
+                <Card>
+                    <CardHeader>
+                        <CardTitle>
+                            <View className="flex-row items-center gap-2">
+                                <Sun size={18} color={theme.colors.mutedForeground} />
+                                <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">Light Themes</Text>
+                            </View>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <View className="flex-row flex-wrap gap-3">
+                            {lightThemes.map(([key, t]) => (
+                                <ThemeCard
+                                    key={key}
+                                    themeKey={key}
+                                    themeName={t.name}
+                                    isSelected={themeName === key}
+                                    isDark={t.isDark}
+                                    colors={{
+                                        background: t.colors.background,
+                                        foreground: t.colors.foreground,
+                                        primary: t.colors.primary,
+                                        secondary: t.colors.secondary,
+                                        accent: t.colors.accent,
+                                    }}
+                                    onSelect={() => setTheme(key)}
+                                />
+                            ))}
+                        </View>
+                    </CardContent>
+                </Card>
 
-            {SHOW_TEST_DATA_BUTTON && <DevToolsCard />}
-        </ThemedScrollView>
+                <BackendConnectionCard />
+
+                {SHOW_TEST_DATA_BUTTON && <DevToolsCard />}
+            </ThemedScrollView>
+        </KeyboardAvoidingView>
     );
 }

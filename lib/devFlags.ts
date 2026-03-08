@@ -1,1 +1,1 @@
-export const SHOW_TEST_DATA_BUTTON = false;
+export const SHOW_TEST_DATA_BUTTON = false

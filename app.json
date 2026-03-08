@@ -2,7 +2,7 @@
   "expo": {
     "name": "Agath",
     "slug": "Agath",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "agath",
@@ -31,7 +31,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Agath to use your camera to scan scouting QR codes."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

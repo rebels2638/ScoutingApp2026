@@ -194,7 +194,10 @@ export function calculateTeamStats(entries: ScoutingEntry[], teamNumber: number)
     const totalCycles = avgScoringCycles + avgWastedCycles;
     const cycleEfficiency = totalCycles > 0 ? avgScoringCycles / totalCycles : 1;
     const defenseRate = teamEntries.filter((e) => e.teleop.playsDefense).length / matchCount;
-    const trenchUsageRate = teamEntries.filter((e) => e.teleop.usesTrenchRoutes).length / matchCount;
+    const trenchEntries = teamEntries.filter((e) => e.teleop.usesTrenchRoutes !== null);
+    const trenchUsageRate = trenchEntries.length > 0
+        ? trenchEntries.filter((e) => e.teleop.usesTrenchRoutes).length / trenchEntries.length
+        : 0;
 
     const activeOffenseOnlyRate = teamEntries.filter((e) => e.activePhase.playsOffenseOnly).length / matchCount;
     const inactiveDefenseRate = teamEntries.filter((e) => e.inactivePhase.playsDefense).length / matchCount;
@@ -400,10 +403,11 @@ export function getClimbDistribution(entries: ScoutingEntry[]): Distribution {
 
 export function getFuelSourceDistribution(entries: ScoutingEntry[]): Distribution {
     const sources = ['Neutral Zone', 'Depot', 'Outpost feed', 'Mixed'] as const;
+    const entriesWithFuelSource = entries.filter((entry) => entry.teleop.primaryFuelSource !== null);
     const counts = sources.map((source) =>
-        entries.filter((e) => e.teleop.primaryFuelSource === source).length
+        entriesWithFuelSource.filter((entry) => entry.teleop.primaryFuelSource === source).length
     );
-    const total = entries.length || 1;
+    const total = entriesWithFuelSource.length || 1;
 
     return {
         labels: [...sources],

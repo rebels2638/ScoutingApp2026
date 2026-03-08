@@ -1,15 +1,17 @@
+import * as React from 'react';
+import { View } from 'react-native';
+
 import { FormField, FormSection, FormToggleField } from '@/components/ui/FormField';
 import { Select } from '@/components/ui/Select';
 import { Stepper } from '@/components/ui/Stepper';
 import { teleopDefinitions } from '@/lib/definitions';
 import { useUIScale } from '@/lib/ui-scale';
 import type { FuelRange, PrimaryFuelSource, TeleopData } from '@/lib/types';
-import * as React from 'react';
-import { View } from 'react-native';
 
 interface TeleopSectionProps {
     data: TeleopData;
     onChange: (data: TeleopData) => void;
+    showPitManagedFields?: boolean;
 }
 
 const fuelRangeOptions = [
@@ -30,6 +32,7 @@ const fuelSourceOptions = [
 export const TeleopSection: React.FC<TeleopSectionProps> = ({
     data,
     onChange,
+    showPitManagedFields = true,
 }) => {
     const { scaleOption } = useUIScale();
     const stackFields = scaleOption === 'large' || scaleOption === 'extra-large';
@@ -80,34 +83,38 @@ export const TeleopSection: React.FC<TeleopSectionProps> = ({
                 />
             </FormField>
 
-            <FormField
-                label="Typical FUEL Carried"
-                definition={teleopDefinitions.typicalFuelCarried}
-            >
-                <Select
-                    value={data.typicalFuelCarried}
-                    onValueChange={(value) => onChange({ ...data, typicalFuelCarried: value })}
-                    options={fuelRangeOptions}
-                />
-            </FormField>
+            {showPitManagedFields ? (
+                <>
+                    <FormField
+                        label="Typical FUEL Carried"
+                        definition={teleopDefinitions.typicalFuelCarried}
+                    >
+                        <Select
+                            value={data.typicalFuelCarried ?? '1-4'}
+                            onValueChange={(value) => onChange({ ...data, typicalFuelCarried: value })}
+                            options={fuelRangeOptions}
+                        />
+                    </FormField>
 
-            <FormField
-                label="Primary Fuel Source"
-                definition={teleopDefinitions.primaryFuelSource}
-            >
-                <Select
-                    value={data.primaryFuelSource}
-                    onValueChange={(value) => onChange({ ...data, primaryFuelSource: value })}
-                    options={fuelSourceOptions}
-                />
-            </FormField>
+                    <FormField
+                        label="Primary Fuel Source"
+                        definition={teleopDefinitions.primaryFuelSource}
+                    >
+                        <Select
+                            value={data.primaryFuelSource ?? 'Neutral Zone'}
+                            onValueChange={(value) => onChange({ ...data, primaryFuelSource: value })}
+                            options={fuelSourceOptions}
+                        />
+                    </FormField>
 
-            <FormToggleField
-                label="Uses TRENCH Routes"
-                definition={teleopDefinitions.usesTrenchRoutes}
-                checked={data.usesTrenchRoutes}
-                onCheckedChange={(checked) => onChange({ ...data, usesTrenchRoutes: checked })}
-            />
+                    <FormToggleField
+                        label="Uses TRENCH Routes"
+                        definition={teleopDefinitions.usesTrenchRoutes}
+                        checked={data.usesTrenchRoutes ?? false}
+                        onCheckedChange={(checked) => onChange({ ...data, usesTrenchRoutes: checked })}
+                    />
+                </>
+            ) : null}
 
             <FormToggleField
                 label="Plays Defense"

@@ -9,6 +9,8 @@ export type ClimbLevel = 'None' | 'Level 1' | 'Level 2' | 'Level 3';
 export type ClimbSuccessState = 'Success' | 'Failed' | 'Fell off' | 'N/A';
 export type MobilityIssue = 'None' | 'Brownout-ish' | 'Tipped' | 'Stuck' | 'Other';
 export type Card = 'None' | 'Yellow' | 'Red';
+export type DrivetrainType = 'Swerve' | 'West Coast' | 'Mecanum' | 'Tank' | 'Other';
+export type ScoutingEntrySyncStatus = 'local' | 'queued' | 'synced';
 
 export interface MatchMetadata {
     matchNumber: number;
@@ -18,7 +20,7 @@ export interface MatchMetadata {
 }
 
 export interface AutonomousData {
-    preloadCount: number;
+    preloadCount: number | null;
     leftStartingLine: boolean;
     crossedCenterLine: boolean;
     fuelScoredBucket: FuelScoredBucket;
@@ -36,9 +38,9 @@ export interface TeleopData {
     scoringCyclesActive: number;
     wastedCyclesInactive: number;
     fuelShotsAttempted?: number;
-    typicalFuelCarried: FuelRange;
-    primaryFuelSource: PrimaryFuelSource;
-    usesTrenchRoutes: boolean;
+    typicalFuelCarried: FuelRange | null;
+    primaryFuelSource: PrimaryFuelSource | null;
+    usesTrenchRoutes: boolean | null;
     playsDefense: boolean;
 }
 
@@ -71,6 +73,8 @@ export interface EndgameData {
 export interface ScoutingEntry {
     id: string;
     timestamp: number;
+    syncStatus?: ScoutingEntrySyncStatus;
+    syncedAt?: number | null;
     matchMetadata: MatchMetadata;
     autonomous: AutonomousData;
     teleop: TeleopData;
@@ -86,7 +90,10 @@ export interface PitScoutingEntry {
     calibration: PitCalibrationData;
 }
 
-export function createDefaultScoutingEntry(): Omit<ScoutingEntry, 'id' | 'timestamp'> {
+export function createDefaultScoutingEntry(): Omit<
+    ScoutingEntry,
+    'id' | 'timestamp' | 'syncStatus' | 'syncedAt'
+> {
     return {
         matchMetadata: {
             matchNumber: 1,

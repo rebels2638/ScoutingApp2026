@@ -201,11 +201,21 @@ function getAutoClimbPoints(entry: ScoutingEntry): number {
 }
 
 function getTeleopFuelEstimate(entry: ScoutingEntry): number {
-    return entry.teleop.scoringCyclesActive * TELEOP_FUEL_ESTIMATE[entry.teleop.typicalFuelCarried];
+    const typicalFuelCarried = entry.teleop.typicalFuelCarried;
+    if (!typicalFuelCarried) {
+        return 0;
+    }
+
+    return entry.teleop.scoringCyclesActive * TELEOP_FUEL_ESTIMATE[typicalFuelCarried];
 }
 
 function getInactiveFuelEstimate(entry: ScoutingEntry): number {
-    return entry.teleop.wastedCyclesInactive * TELEOP_FUEL_ESTIMATE[entry.teleop.typicalFuelCarried];
+    const typicalFuelCarried = entry.teleop.typicalFuelCarried;
+    if (!typicalFuelCarried) {
+        return 0;
+    }
+
+    return entry.teleop.wastedCyclesInactive * TELEOP_FUEL_ESTIMATE[typicalFuelCarried];
 }
 
 function getEstimatedFuelShotsAttempted(entry: ScoutingEntry): number {
@@ -623,7 +633,7 @@ export default function AnalysisTab() {
     );
 
     const sourceDistribution = useMemo(() => {
-        const sourceOptions: Array<ScoutingEntry['teleop']['primaryFuelSource']> = [
+        const sourceOptions: Array<NonNullable<ScoutingEntry['teleop']['primaryFuelSource']>> = [
             'Neutral Zone',
             'Depot',
             'Outpost feed',

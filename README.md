@@ -52,6 +52,20 @@ npm run ios
 npm run web
 ```
 
+## Team
+
+<a href="https://github.com/EthanDevCode">
+  <img src="https://avatars.githubusercontent.com/EthanDevCode?v=4" width="120" align="left" alt="Ethan Kang">
+</a>
+
+<h3><a href="https://github.com/EthanDevCode">Ethan Kang</a></h3>
+<strong><em>Lead Developer</em></strong>
+
+Have a suggestion or a bug report? Head over to the `Issues` tab to let me know!  
+
+<br clear="left"/>
+<br/>
+
 ## License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).

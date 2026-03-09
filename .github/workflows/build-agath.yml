@@ -1,0 +1,238 @@
+name: Build Agath
+
+on:
+    workflow_dispatch:
+        inputs:
+            android_application_id:
+                description: Android application ID to inject before prebuild.
+                required: true
+                default: com.rebelrobotics.scoutingapp2024
+                type: string
+            ios_bundle_identifier:
+                description: iOS bundle identifier to inject before prebuild.
+                required: true
+                default: com.reidf.2638scout
+                type: string
+
+permissions:
+    contents: read
+
+concurrency:
+    group: build-agath-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    CI: '1'
+    EXPO_NO_TELEMETRY: '1'
+
+jobs:
+    validate:
+        name: Validate config
+        runs-on: ubuntu-24.04
+        timeout-minutes: 20
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Type-check app
+              run: npx tsc --noEmit
+
+            - name: Validate Expo config
+              run: npx expo config --type public >/dev/null
+
+    build-android:
+        name: Build Android
+        runs-on: ubuntu-24.04
+        needs: validate
+        timeout-minutes: 45
+        env:
+            ANDROID_APPLICATION_ID: ${{ inputs.android_application_id }}
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+
+            - name: Set up Java
+              uses: actions/setup-java@v4
+              with:
+                  distribution: temurin
+                  java-version: '17'
+                  cache: gradle
+
+            - name: Set up Android SDK
+              uses: android-actions/setup-android@v3
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Inject Android application ID
+              run: |
+                  node <<'EOF'
+                  const fs = require('fs');
+                  const path = 'app.json';
+                  const app = JSON.parse(fs.readFileSync(path, 'utf8'));
+
+                  app.expo = app.expo ?? {};
+                  app.expo.android = {
+                      ...(app.expo.android ?? {}),
+                      package: process.env.ANDROID_APPLICATION_ID,
+                  };
+
+                  fs.writeFileSync(path, `${JSON.stringify(app, null, 4)}\n`);
+                  EOF
+
+            - name: Prebuild Android project
+              run: npx expo prebuild --clean --platform android --no-install
+
+            - name: Remove Android release signing
+              run: |
+                  python <<'EOF'
+                  from pathlib import Path
+
+                  path = Path("android/app/build.gradle")
+                  lines = path.read_text().splitlines()
+                  output = []
+                  in_release = False
+                  release_depth = 0
+
+                  for line in lines:
+                      stripped = line.strip()
+
+                      if stripped == "release {":
+                          in_release = True
+                          release_depth = line.count("{") - line.count("}")
+                          output.append(line)
+                          continue
+
+                      if in_release:
+                          release_depth += line.count("{") - line.count("}")
+                          if stripped.startswith("signingConfig"):
+                              continue
+                          if release_depth == 0:
+                              in_release = False
+
+                      output.append(line)
+
+                  path.write_text("\n".join(output) + "\n")
+                  EOF
+
+            - name: Build unsigned Android APK
+              run: |
+                  cd android
+                  chmod +x gradlew
+                  ./gradlew --no-daemon assembleRelease
+                  cp app/build/outputs/apk/release/app-release-unsigned.apk ../agath.apk
+
+            - name: Upload Android artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: agath.apk
+                  path: agath.apk
+                  if-no-files-found: error
+                  retention-days: 14
+
+            - name: Summarize Android artifact
+              run: |
+                  {
+                      echo "### Android artifact"
+                      echo "- \`agath.apk\`"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+    build-ios:
+        name: Build iOS
+        runs-on: macos-15
+        needs: validate
+        timeout-minutes: 60
+        env:
+            IOS_BUNDLE_IDENTIFIER: ${{ inputs.ios_bundle_identifier }}
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Inject iOS bundle identifier
+              run: |
+                  node <<'EOF'
+                  const fs = require('fs');
+                  const path = 'app.json';
+                  const app = JSON.parse(fs.readFileSync(path, 'utf8'));
+
+                  app.expo = app.expo ?? {};
+                  app.expo.ios = {
+                      ...(app.expo.ios ?? {}),
+                      bundleIdentifier: process.env.IOS_BUNDLE_IDENTIFIER,
+                  };
+
+                  fs.writeFileSync(path, `${JSON.stringify(app, null, 4)}\n`);
+                  EOF
+
+            - name: Prebuild iOS project
+              run: npx expo prebuild --clean --platform ios --no-install
+
+            - name: Install CocoaPods
+              run: pod install --project-directory=ios
+
+            - name: Build unsigned iOS app
+              run: |
+                  PROJECT_NAME="$(basename "$(find ios -maxdepth 1 -name '*.xcodeproj' -print -quit)" .xcodeproj)"
+                  test -n "$PROJECT_NAME"
+
+                  xcodebuild \
+                      -workspace "ios/${PROJECT_NAME}.xcworkspace" \
+                      -scheme "$PROJECT_NAME" \
+                      -configuration Release \
+                      -sdk iphoneos \
+                      -destination 'generic/platform=iOS' \
+                      -derivedDataPath ios/build \
+                      CODE_SIGNING_ALLOWED=NO \
+                      CODE_SIGNING_REQUIRED=NO \
+                      CODE_SIGN_IDENTITY="" \
+                      clean build
+
+            - name: Package unsigned iOS IPA
+              run: |
+                  APP_PATH="$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d -print -quit)"
+                  test -n "$APP_PATH"
+
+                  rm -rf Payload
+                  mkdir -p Payload
+                  cp -R "$APP_PATH" Payload/
+                  zip -qry agath.ipa Payload
+                  rm -rf Payload
+
+            - name: Upload iOS artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: agath.ipa
+                  path: agath.ipa
+                  if-no-files-found: error
+                  retention-days: 14
+
+            - name: Summarize iOS artifact
+              run: |
+                  {
+                      echo "### iOS artifact"
+                      echo "- \`agath.ipa\`"
+                  } >> "$GITHUB_STEP_SUMMARY"

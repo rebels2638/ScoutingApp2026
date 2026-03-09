@@ -56,6 +56,15 @@ jobs:
         timeout-minutes: 45
         env:
             ANDROID_APPLICATION_ID: ${{ inputs.android_application_id }}
+            EXPO_PUBLIC_APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
+            EXPO_PUBLIC_APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
+            EXPO_PUBLIC_APPWRITE_PLATFORM_ID: ${{ inputs.android_application_id }}
+            EXPO_PUBLIC_APPWRITE_DATABASE_ID: ${{ secrets.APPWRITE_DATABASE_ID }}
+            EXPO_PUBLIC_APPWRITE_COLLECTION_ASSIGNMENTS_ID: ${{ secrets.APPWRITE_COLLECTION_ASSIGNMENTS_ID }}
+            EXPO_PUBLIC_APPWRITE_COLLECTION_SCOUTING_DATA_ID: ${{ secrets.APPWRITE_COLLECTION_SCOUTING_DATA_ID }}
+            EXPO_PUBLIC_APPWRITE_COLLECTION_PIT_SCOUTING_ID: ${{ secrets.APPWRITE_COLLECTION_PIT_SCOUTING_ID }}
+            EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID: ${{ secrets.APPWRITE_FUNCTION_VALIDATE_KEY_ID }}
+            EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID: ${{ secrets.APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID }}
         steps:
             - name: Check out repository
               uses: actions/checkout@v4
@@ -71,7 +80,6 @@ jobs:
               with:
                   distribution: temurin
                   java-version: '17'
-                  cache: gradle
 
             - name: Set up Android SDK
               uses: android-actions/setup-android@v3
@@ -159,6 +167,15 @@ jobs:
         timeout-minutes: 60
         env:
             IOS_BUNDLE_IDENTIFIER: ${{ inputs.ios_bundle_identifier }}
+            EXPO_PUBLIC_APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
+            EXPO_PUBLIC_APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
+            EXPO_PUBLIC_APPWRITE_PLATFORM_ID: ${{ inputs.ios_bundle_identifier }}
+            EXPO_PUBLIC_APPWRITE_DATABASE_ID: ${{ secrets.APPWRITE_DATABASE_ID }}
+            EXPO_PUBLIC_APPWRITE_COLLECTION_ASSIGNMENTS_ID: ${{ secrets.APPWRITE_COLLECTION_ASSIGNMENTS_ID }}
+            EXPO_PUBLIC_APPWRITE_COLLECTION_SCOUTING_DATA_ID: ${{ secrets.APPWRITE_COLLECTION_SCOUTING_DATA_ID }}
+            EXPO_PUBLIC_APPWRITE_COLLECTION_PIT_SCOUTING_ID: ${{ secrets.APPWRITE_COLLECTION_PIT_SCOUTING_ID }}
+            EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID: ${{ secrets.APPWRITE_FUNCTION_VALIDATE_KEY_ID }}
+            EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID: ${{ secrets.APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID }}
         steps:
             - name: Check out repository
               uses: actions/checkout@v4

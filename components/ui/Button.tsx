@@ -8,8 +8,6 @@ import { Pressable, PressableProps, View, ViewStyle, StyleProp } from 'react-nat
 import Animated from 'react-native-reanimated';
 import { Text } from './Text';
 
-const AnimatedView = Animated.createAnimatedComponent(View);
-
 const buttonVariants = cva(
     'flex-row items-center justify-center rounded-md',
     {
@@ -140,34 +138,37 @@ export const Button = React.forwardRef<View, ButtonProps>(
                 disabled={disabled}
                 {...props}
             >
-                <AnimatedView
-                    style={[
-                        getVariantStyles(),
-                        getSizeStyles(),
-                        disableAnimation ? undefined : animatedStyle,
-                        style,
-                    ]}
-                    className={cn(
-                        buttonVariants({ variant, size }),
-                        disabled && 'opacity-50',
-                        className
-                    )}
+                <Animated.View
+                    style={disableAnimation ? undefined : animatedStyle}
                 >
-                    {typeof children === 'string' ? (
-                        <Text
-                            className={cn(
-                                'font-medium text-sm',
-                                variant === 'link' && 'underline',
-                                textClassName
-                            )}
-                            style={{ color: getTextColor(), fontSize: scaled(14) }}
-                        >
-                            {children}
-                        </Text>
-                    ) : (
-                        children
-                    )}
-                </AnimatedView>
+                    <View
+                        style={[
+                            getVariantStyles(),
+                            getSizeStyles(),
+                            style,
+                        ]}
+                        className={cn(
+                            buttonVariants({ variant, size }),
+                            disabled && 'opacity-50',
+                            className
+                        )}
+                    >
+                        {typeof children === 'string' ? (
+                            <Text
+                                className={cn(
+                                    'font-medium text-sm',
+                                    variant === 'link' && 'underline',
+                                    textClassName
+                                )}
+                                style={{ color: getTextColor(), fontSize: scaled(14) }}
+                            >
+                                {children}
+                            </Text>
+                        ) : (
+                            children
+                        )}
+                    </View>
+                </Animated.View>
             </Pressable>
         );
     }

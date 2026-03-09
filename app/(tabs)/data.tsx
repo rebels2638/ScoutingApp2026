@@ -9,7 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Text } from '@/components/ui/Text';
+import { findMatchingAssignment } from '@/lib/backend/assignments';
 import { useBackendAuth } from '@/lib/backend/auth';
+import { getCachedPitProfiles, type PitTeamProfile } from '@/lib/backend/pitScouting';
+import {
+    buildPitProfileMap,
+    getPitProfileForEntry,
+    getResolvedPreloadCount,
+    getResolvedPrimaryFuelSource,
+    getResolvedTypicalFuelCarried,
+    getResolvedUsesTrenchRoutes,
+} from '@/lib/pitScoutingOverlay';
 import { removeQueuedScoutingSubmissions, submitScoutingEntryWithQueue } from '@/lib/backend/submissions';
 import { usePendingAssignments } from '@/lib/backend/usePendingAssignments';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult, type CameraMountError } from '@/lib/camera';
@@ -88,6 +98,7 @@ export default function DataTab() {
         userId,
     });
     const [entries, setEntries] = useState<ScoutingEntry[]>([]);
+    const [pitProfiles, setPitProfiles] = useState<PitTeamProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState<ScoutingEntry | null>(null);
@@ -101,11 +112,16 @@ export default function DataTab() {
     const [exportingQrEntryId, setExportingQrEntryId] = useState<string | null>(null);
     const pendingQrExportTaskRef = React.useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
     const isBackendEnabledRef = React.useRef(isBackendEnabled);
+    const pitProfilesByTeam = useMemo(() => buildPitProfileMap(pitProfiles), [pitProfiles]);
 
     const loadEntries = useCallback(async () => {
         try {
-            const data = await getScoutingEntries();
+            const [data, cachedPitProfiles] = await Promise.all([
+                getScoutingEntries(),
+                getCachedPitProfiles(),
+            ]);
             setEntries(data);
+            setPitProfiles(cachedPitProfiles);
             setSelectedEntryIds((current) =>
                 current.filter((id) =>
                     data.some((entry) => entry.id === id && isEntryUploadable(entry))
@@ -310,6 +326,10 @@ export default function DataTab() {
             ),
         [entries]
     );
+    const selectedEntryPitProfile = useMemo(
+        () => (selectedEntry ? getPitProfileForEntry(selectedEntry, pitProfilesByTeam) : null),
+        [pitProfilesByTeam, selectedEntry]
+    );
 
     const hasActiveFilters = filterMatchType !== 'All' || sortBy !== 'timestamp' || normalizedQuery.length > 0;
 
@@ -347,18 +367,16 @@ export default function DataTab() {
             let failedCount = 0;
 
             for (const entry of uploadableSelectedEntries) {
-                const matchingAssignmentIndex = availableAssignments.findIndex(
-                    (assignment) =>
-                        assignment.matchNumber === entry.matchMetadata.matchNumber &&
-                        assignment.teamNumber === entry.matchMetadata.teamNumber
-                );
-                const assignmentId =
-                    matchingAssignmentIndex >= 0
-                        ? availableAssignments[matchingAssignmentIndex].id
-                        : undefined;
+                const matchingAssignment = findMatchingAssignment(availableAssignments, entry.matchMetadata);
+                const assignmentId = matchingAssignment?.id;
 
-                if (matchingAssignmentIndex >= 0) {
-                    availableAssignments.splice(matchingAssignmentIndex, 1);
+                if (matchingAssignment) {
+                    const matchingAssignmentIndex = availableAssignments.findIndex(
+                        (assignment) => assignment.id === matchingAssignment.id
+                    );
+                    if (matchingAssignmentIndex >= 0) {
+                        availableAssignments.splice(matchingAssignmentIndex, 1);
+                    }
                 }
 
                 const result = await submitScoutingEntryWithQueue({
@@ -583,6 +601,7 @@ export default function DataTab() {
 
             <EntryDetailModal
                 entry={selectedEntry}
+                pitProfile={selectedEntryPitProfile}
                 canExportQr={!isBackendEnabled}
                 isExportingQr={selectedEntry?.id === exportingQrEntryId}
                 onExportQr={handleExportQr}
@@ -1006,6 +1025,7 @@ function EmptyState({ hasEntries, onResetFilters }: { hasEntries: boolean; onRes
 
 interface EntryDetailModalProps {
     entry: ScoutingEntry | null;
+    pitProfile: PitTeamProfile | null;
     canExportQr: boolean;
     isExportingQr: boolean;
     onExportQr: (entry: ScoutingEntry) => void;
@@ -1014,6 +1034,7 @@ interface EntryDetailModalProps {
 
 function EntryDetailModal({
     entry,
+    pitProfile,
     canExportQr,
     isExportingQr,
     onExportQr,
@@ -1026,6 +1047,11 @@ function EntryDetailModal({
     if (!entry) return null;
 
     const { matchMetadata, autonomous, teleop, activePhase, inactivePhase, endgame } = entry;
+    const preloadCount = getResolvedPreloadCount(entry, pitProfile);
+    const typicalFuelCarried = getResolvedTypicalFuelCarried(entry, pitProfile);
+    const primaryFuelSource = getResolvedPrimaryFuelSource(entry, pitProfile);
+    const usesTrenchRoutes = getResolvedUsesTrenchRoutes(entry, pitProfile);
+    const isUsingPitTrenchFallback = teleop.usesTrenchRoutes == null && pitProfile?.canFitTrench != null;
 
     return (
         <Modal
@@ -1080,7 +1106,7 @@ function EntryDetailModal({
                         </Card>
 
                         <DetailSection title="Autonomous">
-                            <DetailRow label="Preload Count" value={autonomous.preloadCount == null ? '—' : String(autonomous.preloadCount)} />
+                            <DetailRow label="Preload Count" value={preloadCount == null ? '—' : String(preloadCount)} />
                             <DetailRow label="Left Starting Line" value={autonomous.leftStartingLine ? 'Yes' : 'No'} />
                             <DetailRow label="Crossed Center Line" value={autonomous.crossedCenterLine ? 'Yes' : 'No'} />
                             <DetailRow label="Fuel Scored" value={autonomous.fuelScoredBucket} />
@@ -1095,9 +1121,22 @@ function EntryDetailModal({
                             <DetailRow label="Scoring Cycles (Active)" value={String(teleop.scoringCyclesActive)} />
                             <DetailRow label="Wasted Cycles (Inactive)" value={String(teleop.wastedCyclesInactive)} />
                             <DetailRow label="Fuel Shots Attempted" value={String(teleop.fuelShotsAttempted ?? 0)} />
-                            <DetailRow label="Typical Fuel Carried" value={teleop.typicalFuelCarried ?? '—'} />
-                            <DetailRow label="Primary Fuel Source" value={teleop.primaryFuelSource ?? '—'} />
-                            <DetailRow label="Uses Trench Routes" value={teleop.usesTrenchRoutes == null ? '—' : teleop.usesTrenchRoutes ? 'Yes' : 'No'} />
+                            <DetailRow label="Typical Fuel Carried" value={typicalFuelCarried ?? '—'} />
+                            <DetailRow label="Primary Fuel Source" value={primaryFuelSource ?? '—'} />
+                            <DetailRow
+                                label="Uses Trench Routes"
+                                value={
+                                    usesTrenchRoutes == null
+                                        ? '—'
+                                        : `${usesTrenchRoutes ? 'Yes' : 'No'}${isUsingPitTrenchFallback ? ' (pit)' : ''}`
+                                }
+                            />
+                            {isUsingPitTrenchFallback ? (
+                                <DetailRow
+                                    label="Trench Compatibility"
+                                    value={pitProfile.canFitTrench ? 'Can fit trench' : 'Cannot fit trench'}
+                                />
+                            ) : null}
                             <DetailRow label="Plays Defense" value={teleop.playsDefense ? 'Yes' : 'No'} />
                         </DetailSection>
 

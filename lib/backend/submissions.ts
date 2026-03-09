@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { warnWithError } from '../error-utils';
 import { getScoutingEntryById, setScoutingEntrySyncStatus } from '../storage';
 import type { ScoutingEntry, ScoutingEntrySyncStatus } from '../types';
+import { markAssignmentCompleted } from './assignments';
 import { getAppwriteFunctions } from './client';
 import { requireBackendConfig } from './config';
 import { getInstallUuid } from './device';
@@ -36,6 +37,7 @@ interface SubmitScoutingEntryWithQueueParams {
 
 export interface SubmitScoutingEntryWithQueueResult {
     status: 'uploaded' | 'queued' | 'failed' | 'skipped';
+    assignmentStatus?: 'none' | 'completed' | 'pending' | 'failed';
 }
 
 export interface FlushQueuedScoutingSubmissionsResult {
@@ -170,6 +172,23 @@ async function executeSubmission(payload: ScoutingSubmissionPayload): Promise<vo
     }
 }
 
+async function completeAssignmentAfterSubmission(
+    assignmentId?: string
+): Promise<'none' | 'completed' | 'failed'> {
+    const trimmedAssignmentId = assignmentId?.trim();
+    if (!trimmedAssignmentId) {
+        return 'none';
+    }
+
+    try {
+        await markAssignmentCompleted(trimmedAssignmentId);
+        return 'completed';
+    } catch (error) {
+        warnWithError('Failed to mark assignment completed after scouting submission', error);
+        return 'failed';
+    }
+}
+
 async function buildScoutingSubmissionPayload({
     keyId,
     entry,
@@ -204,13 +223,13 @@ export async function submitScoutingEntryWithQueue(
     const nextEntry = storedEntry ?? params.entry;
     const nextEntryStatus = getScoutingEntrySyncStatus(nextEntry);
     if (nextEntryStatus === 'queued' || nextEntryStatus === 'synced') {
-        return { status: 'skipped' };
+        return { status: 'skipped', assignmentStatus: params.assignmentId ? 'pending' : 'none' };
     }
 
     const queue = await readSubmissionQueue();
     if (queue.some((queuedSubmission) => queuedSubmission.local_entry_id === nextEntry.id)) {
         await persistScoutingEntrySyncStatus(nextEntry.id, 'queued');
-        return { status: 'skipped' };
+        return { status: 'skipped', assignmentStatus: params.assignmentId ? 'pending' : 'none' };
     }
 
     const payload = await buildScoutingSubmissionPayload({
@@ -222,17 +241,18 @@ export async function submitScoutingEntryWithQueue(
         await executeSubmission(payload);
         await removeSubmissionFromQueue(payload.local_entry_id);
         await persistScoutingEntrySyncStatus(payload.local_entry_id, 'synced');
-        return { status: 'uploaded' };
+        const assignmentStatus = await completeAssignmentAfterSubmission(payload.assignment_id);
+        return { status: 'uploaded', assignmentStatus };
     } catch (submissionError) {
         warnWithError('Failed to submit scouting entry to backend, queuing for retry', submissionError);
         try {
             await enqueueSubmission(payload);
             await persistScoutingEntrySyncStatus(payload.local_entry_id, 'queued');
-            return { status: 'queued' };
+            return { status: 'queued', assignmentStatus: payload.assignment_id ? 'pending' : 'none' };
         } catch (queueError) {
             warnWithError('Failed to queue scouting entry for retry', queueError);
             await persistScoutingEntrySyncStatus(payload.local_entry_id, 'local');
-            return { status: 'failed' };
+            return { status: 'failed', assignmentStatus: payload.assignment_id ? 'failed' : 'none' };
         }
     }
 }
@@ -250,6 +270,7 @@ export async function flushQueuedScoutingSubmissions(): Promise<FlushQueuedScout
         try {
             await executeSubmission(queuedSubmission.payload);
             await persistScoutingEntrySyncStatus(queuedSubmission.payload.local_entry_id, 'synced');
+            await completeAssignmentAfterSubmission(queuedSubmission.payload.assignment_id);
             uploadedCount += 1;
         } catch (submissionError) {
             warnWithError('Failed to flush queued scouting submission', submissionError);

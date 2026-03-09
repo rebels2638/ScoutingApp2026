@@ -13,6 +13,14 @@ export type { RadarChartAxis, RadarChartData, RadarChartProps } from './RadarCha
 export { StatCard, StatCardGrid } from './StatCard';
 export type { StatCardProps } from './StatCard';
 
+export { ComparisonTable } from './ComparisonTable';
+export type {
+    ComparisonTableCell,
+    ComparisonTableProps,
+    ComparisonTableRow,
+    ComparisonTableTeam,
+} from './ComparisonTable';
+
 export { Leaderboard } from './Leaderboard';
 export type { LeaderboardItem, LeaderboardProps } from './Leaderboard';
 

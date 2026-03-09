@@ -22,7 +22,6 @@ import {
     setBackendSession,
     setBackendUserId,
 } from './secure';
-import { requestBackendSyncNow } from './sync';
 
 export type BackendAuthState = 'authenticated' | 'guest' | 'unconfigured';
 type ActivateKeyError =
@@ -37,6 +36,12 @@ export interface ActivateKeyResult {
     error?: ActivateKeyError;
 }
 
+interface RevalidateBackendSessionResult {
+    ok: boolean;
+    error?: 'not_ready' | 'invalid_session' | 'unknown';
+    userId?: string;
+}
+
 interface BackendAuthContextValue {
     authState: BackendAuthState;
     isBootstrapping: boolean;
@@ -49,6 +54,7 @@ interface BackendAuthContextValue {
     signOut: () => Promise<void>;
     resetKey: () => Promise<void>;
     disconnectGuest: () => Promise<void>;
+    revalidateSession: () => Promise<RevalidateBackendSessionResult>;
 }
 
 interface SessionCredentials {
@@ -170,6 +176,53 @@ async function clearPersistedBackendAuth(): Promise<void> {
     ]);
 }
 
+async function resolveAuthenticatedBackendUserId(
+    storedSession: string | null,
+    storedUserId: string | null
+): Promise<string> {
+    const appwriteAccount = getAppwriteAccount();
+
+    const resolveUserId = async () => {
+        const account = await appwriteAccount.get();
+        const resolvedUserId = storedUserId ?? account.$id;
+
+        await Promise.all([
+            storedUserId && storedUserId === resolvedUserId
+                ? Promise.resolve()
+                : setBackendUserId(resolvedUserId),
+            setBackendAuthMode('authenticated'),
+            deleteBackendGuestKey(),
+        ]);
+
+        return resolvedUserId;
+    };
+
+    if (!storedSession) {
+        return resolveUserId();
+    }
+
+    setAppwriteSessionHeader(storedSession);
+
+    try {
+        return await resolveUserId();
+    } catch (error) {
+        if (getErrorCode(error) !== 401) {
+            throw error;
+        }
+
+        clearAppwriteSessionHeader();
+        warnWithError('Stored backend session is invalid, trying cookie session fallback', error);
+        await deleteBackendSession();
+
+        try {
+            return await resolveUserId();
+        } catch (fallbackError) {
+            warnWithError('Cookie session fallback failed', fallbackError);
+            throw fallbackError;
+        }
+    }
+}
+
 interface BackendAuthProviderProps {
     children: React.ReactNode;
 }
@@ -218,8 +271,6 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
                     return;
                 }
 
-                const appwriteAccount = getAppwriteAccount();
-
                 if (hasLegacyGuestState) {
                     clearAppwriteSessionHeader();
                     await Promise.all([
@@ -233,41 +284,22 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
                     return;
                 }
 
-                const applyAuthenticatedState = async () => {
-                    const account = await appwriteAccount.get();
-                    const resolvedUserId = storedUserId ?? account.$id;
-
-                    if (!storedUserId || storedUserId !== resolvedUserId) {
-                        await setBackendUserId(resolvedUserId);
-                    }
-
-                    await Promise.all([
-                        setBackendAuthMode('authenticated'),
-                        deleteBackendGuestKey(),
-                    ]);
-
-                    if (!cancelled) {
-                        setUserId(resolvedUserId);
-                        setAuthState('authenticated');
-                    }
-                };
-
-                if (storedSession) {
-                    setAppwriteSessionHeader(storedSession);
-
+                if (storedSession || authMode === 'authenticated') {
                     try {
-                        await applyAuthenticatedState();
+                        const resolvedUserId = await resolveAuthenticatedBackendUserId(
+                            storedSession,
+                            storedUserId
+                        );
+
+                        if (!cancelled) {
+                            setUserId(resolvedUserId);
+                            setAuthState('authenticated');
+                        }
+
                         return;
                     } catch (error) {
-                        warnWithError('Stored backend session is invalid, trying cookie session fallback', error);
-                        clearAppwriteSessionHeader();
-                        await deleteBackendSession();
-
-                        try {
-                            await applyAuthenticatedState();
-                            return;
-                        } catch (fallbackError) {
-                            warnWithError('Cookie session fallback failed', fallbackError);
+                        if (getErrorCode(error) === 401) {
+                            warnWithError('Stored authenticated mode is invalid', error);
                             await clearPersistedBackendAuth();
                             if (!cancelled) {
                                 setUserId(null);
@@ -275,21 +307,8 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
                             }
                             return;
                         }
-                    }
-                }
 
-                if (authMode === 'authenticated') {
-                    try {
-                        await applyAuthenticatedState();
-                        return;
-                    } catch (error) {
-                        warnWithError('Stored authenticated mode is invalid', error);
-                        await clearPersistedBackendAuth();
-                        if (!cancelled) {
-                            setUserId(null);
-                            setAuthState('unconfigured');
-                        }
-                        return;
+                        throw error;
                     }
                 }
 
@@ -318,14 +337,6 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
             cancelled = true;
         };
     }, [isBackendAvailable]);
-
-    React.useEffect(() => {
-        if (authState !== 'authenticated' || !userId) {
-            return;
-        }
-
-        void requestBackendSyncNow();
-    }, [authState, userId]);
 
     const activateKey = React.useCallback(async (rawKey: string): Promise<ActivateKeyResult> => {
         if (!isBackendAvailable) {
@@ -411,6 +422,41 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
         }
     }, [isBackendAvailable]);
 
+    const revalidateSession = React.useCallback(async (): Promise<RevalidateBackendSessionResult> => {
+        if (!isBackendAvailable) {
+            return { ok: false, error: 'not_ready' };
+        }
+
+        try {
+            const [storedSession, storedUserId, authMode] = await Promise.all([
+                getBackendSession(),
+                getBackendUserId(),
+                getBackendAuthMode(),
+            ]);
+
+            if (authMode !== 'authenticated') {
+                return { ok: false, error: 'not_ready' };
+            }
+
+            const resolvedUserId = await resolveAuthenticatedBackendUserId(storedSession, storedUserId);
+            setUserId(resolvedUserId);
+            setAuthState('authenticated');
+            return { ok: true, userId: resolvedUserId };
+        } catch (error) {
+            if (getErrorCode(error) === 401) {
+                warnWithError('Stored authenticated mode is invalid', error);
+                clearAppwriteSessionHeader();
+                await clearPersistedBackendAuth();
+                setUserId(null);
+                setAuthState('unconfigured');
+                return { ok: false, error: 'invalid_session' };
+            }
+
+            warnWithError('Failed to validate backend session', error);
+            return { ok: false, error: 'unknown' };
+        }
+    }, [isBackendAvailable]);
+
     const signOut = React.useCallback(async () => {
         if (isBackendAvailable) {
             try {
@@ -461,6 +507,7 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
             signOut,
             resetKey,
             disconnectGuest,
+            revalidateSession,
         }),
         [
             activateKey,
@@ -471,6 +518,7 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
             isActivating,
             isBackendAvailable,
             isBootstrapping,
+            revalidateSession,
             resetKey,
             signOut,
             userId,

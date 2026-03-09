@@ -1,7 +1,12 @@
 import * as React from 'react';
 
 import { warnWithError } from '../error-utils';
-import { fetchPendingAssignments, type PendingScoutingAssignment } from './assignments';
+import {
+    fetchPendingAssignments,
+    getCachedPendingAssignments,
+    subscribeToPendingAssignments,
+    type PendingScoutingAssignment,
+} from './assignments';
 
 interface UsePendingAssignmentsOptions {
     enabled: boolean;
@@ -43,6 +48,27 @@ export function usePendingAssignments({
         } finally {
             setIsLoading(false);
         }
+    }, [enabled, userId]);
+
+    React.useEffect(() => {
+        if (!enabled || !userId) {
+            setAssignments([]);
+            setError(null);
+            setIsLoading(false);
+            return;
+        }
+
+        setAssignments(getCachedPendingAssignments(userId));
+
+        return subscribeToPendingAssignments((updatedUserId) => {
+            if (updatedUserId !== userId) {
+                return;
+            }
+
+            setAssignments(getCachedPendingAssignments(userId));
+            setError(null);
+            setIsLoading(false);
+        });
     }, [enabled, userId]);
 
     React.useEffect(() => {

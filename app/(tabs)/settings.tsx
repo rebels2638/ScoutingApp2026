@@ -104,8 +104,28 @@ function ThemeCard({ themeKey, themeName, isSelected, isDark, colors, onSelect }
     );
 }
 
+function getQueuedUploadSummary(attemptedCount: number, uploadedCount: number, remainingCount: number): string {
+    if (attemptedCount === 0) {
+        return 'No queued scouting uploads were waiting.';
+    }
+
+    if (remainingCount === 0) {
+        return `Uploaded ${uploadedCount} queued ${attemptedCount === 1 ? 'entry' : 'entries'}.`;
+    }
+
+    return `Uploaded ${uploadedCount} of ${attemptedCount} queued entries; ${remainingCount} still waiting.`;
+}
+
 function BackendConnectionCard() {
-    const { activateKey, authState, isActivating, isBackendAvailable, resetKey, userId } = useBackendAuth();
+    const {
+        activateKey,
+        authState,
+        isActivating,
+        isBackendAvailable,
+        resetKey,
+        revalidateSession,
+        userId,
+    } = useBackendAuth();
     const [isSyncing, setIsSyncing] = useState(false);
     const [isDisablingBackend, setIsDisablingBackend] = useState(false);
     const [rawKey, setRawKey] = useState('');
@@ -121,13 +141,43 @@ function BackendConnectionCard() {
     const handleSyncNow = async () => {
         setIsSyncing(true);
         try {
-            const result = await requestBackendSyncNow();
+            const sessionResult = await revalidateSession();
+            if (!sessionResult.ok) {
+                Alert.alert(
+                    sessionResult.error === 'invalid_session' ? 'Backend session expired' : 'Sync unavailable',
+                    sessionResult.error === 'invalid_session'
+                        ? 'Your backend session is no longer valid. Backend mode has been turned off.'
+                        : 'Unable to sync right now. Please try again shortly.'
+                );
+                return;
+            }
+
+            const result = await requestBackendSyncNow({
+                refreshPendingAssignments: true,
+                refreshPitData: true,
+                userId: sessionResult.userId,
+            });
             if (!result.ok) {
                 Alert.alert('Sync unavailable', 'Unable to sync right now. Please try again shortly.');
                 return;
             }
 
-            Alert.alert('Sync started', 'Queued scouting data will sync in the background.');
+            const summary = [
+                'Backend session is still valid.',
+                getQueuedUploadSummary(
+                    result.attemptedCount ?? 0,
+                    result.uploadedCount ?? 0,
+                    result.remainingCount ?? 0
+                ),
+                result.assignmentsRefreshed ? 'Pending assignments refreshed.' : null,
+                result.pitDataRefreshed
+                    ? `Pit data refreshed${typeof result.pitProfileCount === 'number' ? ` for ${result.pitProfileCount} ${result.pitProfileCount === 1 ? 'team' : 'teams'}.` : '.'}`
+                    : null,
+            ]
+                .filter((line): line is string => line !== null)
+                .join('\n');
+
+            Alert.alert('Sync complete', summary);
         } catch (error) {
             Alert.alert('Sync unavailable', 'Unable to sync right now. Please try again shortly.');
         } finally {
@@ -188,7 +238,7 @@ function BackendConnectionCard() {
                 ) : isAuthenticated ? (
                     <>
                         <CardDescription>
-                            Backend mode is enabled for receiving assignments and syncing entries you explicitly queue from the Data tab.
+                            Backend mode is enabled. Use the sync button below to manually validate your session, refresh assignments and pit data, and upload queued entries from the Data tab.
                         </CardDescription>
                         <Button
                             variant="secondary"
@@ -197,7 +247,7 @@ function BackendConnectionCard() {
                                 void handleSyncNow();
                             }}
                         >
-                            {isSyncing ? 'Syncing...' : 'Sync queued uploads'}
+                            {isSyncing ? 'Syncing...' : 'Sync'}
                         </Button>
                         <Button
                             variant="destructive"

@@ -47,10 +47,14 @@ export const Textarea = React.forwardRef<TextInput, TextareaProps>(
                         multiline
                         textAlignVertical="top"
                         className={cn(
-                            'px-3 py-3 text-base',
+                            'px-3 py-3',
                             className
                         )}
-                        style={{ minHeight: rows * scaled(24), color: colors.foreground, fontSize: scaled(16) }}
+                        style={{
+                            minHeight: rows * scaled(24),
+                            color: colors.foreground,
+                            fontSize: scaled(16),
+                        }}
                         placeholderTextColor={colors.mutedForeground}
                         onFocus={handleFocus}
                         onBlur={handleBlur}

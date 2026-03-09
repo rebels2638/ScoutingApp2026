@@ -1,3 +1,4 @@
+import { useBackendAuth } from '@/lib/backend/auth';
 import { ensureContrast, useTheme } from '@/lib/theme';
 import { useUIScale } from '@/lib/ui-scale';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -176,6 +177,8 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
     const metrics = useTabBarMetrics();
+    const { authState, userId } = useBackendAuth();
+    const isBackendEnabled = authState === 'authenticated' && !!userId;
 
     const tabBarBackground = theme.colors.card;
     const activeBackground = theme.colors.secondaryElevated;
@@ -189,6 +192,10 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
     );
 
     const bottomOffset = Math.max(insets.bottom, metrics.marginBottom);
+    const visibleRoutes = React.useMemo(
+        () => state.routes.filter((route) => isBackendEnabled || route.name !== 'assignments'),
+        [isBackendEnabled, state.routes]
+    );
 
     return (
         <View
@@ -223,7 +230,8 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                     }),
                 }}
             >
-                {state.routes.map((route, index) => {
+                {visibleRoutes.map((route) => {
+                    const routeIndex = state.routes.findIndex((entry) => entry.key === route.key);
                     const { options } = descriptors[route.key];
                     const label =
                         options.tabBarLabel !== undefined
@@ -232,7 +240,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                                 ? options.title
                                 : route.name;
 
-                    const isFocused = state.index === index;
+                    const isFocused = state.index === routeIndex;
 
                     const onPress = () => {
                         const event = navigation.emit({

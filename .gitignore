@@ -107,8 +107,9 @@ $RECYCLE.BIN/
 .Spotlight-V100
 .Trashes
 
-# local backend tooling
+# local tooling
 .appwrite/
+/adminapp/
 
 # backup
 *.bak

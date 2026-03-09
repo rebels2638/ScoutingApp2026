@@ -65,6 +65,7 @@ function RootLayoutNav() {
             <ThemedStatusBar />
             <Stack>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="compare" options={{ headerShown: false, presentation: 'card' }} />
                 <Stack.Screen name="connect" options={{ headerShown: false }} />
                 <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
             </Stack>

@@ -50,7 +50,22 @@ export function LineChart({
     const padding = { top: 20, right: 30, bottom: 40, left: 45 };
     const { width } = useWindowDimensions();
     const screenWidth = Math.max(width - 64, 260);
-    const maxPoints = Math.max(...series.map((s) => s.data.length));
+    const xLabels = Array.from(
+        new Set(
+            allPoints.map((point) => String(point.x))
+        )
+    ).sort((leftLabel, rightLabel) => {
+        const leftMatch = leftLabel.match(/^M?(\d+)$/);
+        const rightMatch = rightLabel.match(/^M?(\d+)$/);
+
+        if (leftMatch && rightMatch) {
+            return Number(leftMatch[1]) - Number(rightMatch[1]);
+        }
+
+        return leftLabel.localeCompare(rightLabel);
+    });
+    const xLabelToIndex = new Map(xLabels.map((label, index) => [label, index]));
+    const maxPoints = Math.max(xLabels.length, 1);
     const minPointSpacing = 24;
     const fitSpacing =
         maxPoints > 1 ? (screenWidth - padding.left - padding.right) / (maxPoints - 1) : screenWidth;
@@ -67,6 +82,15 @@ export function LineChart({
     const minY = Math.min(...yValues, 0);
     const maxY = Math.max(...yValues, 1);
     const yRange = maxY - minY || 1;
+
+    const getPointX = React.useCallback((label: string) => {
+        if (maxPoints <= 1) {
+            return innerWidth / 2;
+        }
+
+        const index = xLabelToIndex.get(label) ?? 0;
+        return (innerWidth / (maxPoints - 1)) * index;
+    }, [innerWidth, maxPoints, xLabelToIndex]);
 
     const defaultColors = React.useMemo(
         () =>
@@ -129,12 +153,17 @@ export function LineChart({
                     if (s.data.length === 0) return null;
 
                     const lineColor = s.color || defaultColors[seriesIndex % defaultColors.length];
-                    const xStep = innerWidth / Math.max(s.data.length - 1, 1);
-
-                    const points = s.data.map((point, i) => ({
-                        x: i * xStep,
-                        y: innerHeight - ((point.y - minY) / yRange) * innerHeight,
-                    }));
+                    const points = s.data
+                        .slice()
+                        .sort(
+                            (leftPoint, rightPoint) =>
+                                (xLabelToIndex.get(String(leftPoint.x)) ?? 0) -
+                                (xLabelToIndex.get(String(rightPoint.x)) ?? 0)
+                        )
+                        .map((point) => ({
+                            x: getPointX(String(point.x)),
+                            y: innerHeight - ((point.y - minY) / yRange) * innerHeight,
+                        }));
 
                     const pathD = points
                         .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
@@ -165,22 +194,20 @@ export function LineChart({
                     );
                 })}
 
-                {series[0]?.data.map((point, i) => {
-                    const xStep = innerWidth / Math.max(series[0].data.length - 1, 1);
-
-                    const showLabel = series[0].data.length <= 6 || i % Math.ceil(series[0].data.length / 6) === 0;
+                {xLabels.map((label, i) => {
+                    const showLabel = xLabels.length <= 6 || i % Math.ceil(xLabels.length / 6) === 0;
                     if (!showLabel) return null;
 
                     return (
                         <SvgText
-                            key={i}
-                            x={i * xStep}
+                            key={label}
+                            x={getPointX(label)}
                             y={innerHeight + 16}
                             textAnchor="middle"
                             fontSize={9}
                             fill={colors.mutedForeground}
                         >
-                            {String(point.x).length > 6 ? `${String(point.x).substring(0, 6)}…` : point.x}
+                            {label.length > 6 ? `${label.substring(0, 6)}…` : label}
                         </SvgText>
                     );
                 })}

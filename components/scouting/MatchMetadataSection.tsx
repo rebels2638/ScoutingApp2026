@@ -11,6 +11,7 @@ import { View } from 'react-native';
 interface MatchMetadataSectionProps {
     data: MatchMetadata;
     onChange: (data: MatchMetadata) => void;
+    disabled?: boolean;
 }
 
 const matchTypeOptions = [
@@ -27,6 +28,7 @@ const allianceOptions = [
 export const MatchMetadataSection: React.FC<MatchMetadataSectionProps> = ({
     data,
     onChange,
+    disabled = false,
 }) => {
     const { scaleOption } = useUIScale();
     const stackFields = scaleOption === 'large' || scaleOption === 'extra-large';
@@ -47,6 +49,7 @@ export const MatchMetadataSection: React.FC<MatchMetadataSectionProps> = ({
                             }}
                             keyboardType="number-pad"
                             placeholder="1"
+                            editable={!disabled}
                         />
                     </FormField>
                 </View>
@@ -63,6 +66,7 @@ export const MatchMetadataSection: React.FC<MatchMetadataSectionProps> = ({
                             }}
                             keyboardType="number-pad"
                             placeholder="2638"
+                            editable={!disabled}
                         />
                     </FormField>
                 </View>
@@ -76,6 +80,7 @@ export const MatchMetadataSection: React.FC<MatchMetadataSectionProps> = ({
                     value={data.matchType}
                     onValueChange={(value) => onChange({ ...data, matchType: value })}
                     options={matchTypeOptions}
+                    disabled={disabled}
                 />
             </FormField>
 
@@ -87,6 +92,7 @@ export const MatchMetadataSection: React.FC<MatchMetadataSectionProps> = ({
                     value={data.allianceColor}
                     onValueChange={(value) => onChange({ ...data, allianceColor: value })}
                     options={allianceOptions}
+                    disabled={disabled}
                 />
             </FormField>
         </FormSection>

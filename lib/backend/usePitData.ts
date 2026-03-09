@@ -5,10 +5,9 @@ import {
     forceRefreshPitData,
     getCachedPitProfileForTeam,
     refreshPitDataIfStale,
+    subscribeToPitDataRefresh,
     type PitTeamProfile,
 } from './pitScouting';
-
-const POLL_INTERVAL_MS = 60 * 60 * 1000;
 
 interface UsePitDataOptions {
     enabled: boolean;
@@ -30,25 +29,18 @@ export function usePitData({ enabled }: UsePitDataOptions): UsePitDataReturn {
             return;
         }
 
-        let cancelled = false;
+        return subscribeToPitDataRefresh(() => {
+            setLastRefreshed(Date.now());
+        });
+    }, [enabled]);
 
-        const doRefresh = async () => {
-            const didRefresh = await refreshPitDataIfStale();
-            if (!cancelled && didRefresh) {
-                setLastRefreshed(Date.now());
-            }
-        };
+    React.useEffect(() => {
+        const config = getBackendConfig();
+        if (!enabled || !config?.collectionPitScoutingId) {
+            return;
+        }
 
-        void doRefresh();
-
-        const interval = setInterval(() => {
-            void doRefresh();
-        }, POLL_INTERVAL_MS);
-
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
+        void refreshPitDataIfStale();
     }, [enabled]);
 
     const refreshNow = React.useCallback(async () => {
@@ -59,7 +51,6 @@ export function usePitData({ enabled }: UsePitDataOptions): UsePitDataReturn {
         }
 
         await forceRefreshPitData();
-        setLastRefreshed(Date.now());
     }, [enabled]);
 
     const getProfileForTeam = React.useCallback(

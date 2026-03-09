@@ -25,6 +25,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(
         const colors = useThemeColors();
         const { scaled } = useUIScale();
         const focusProgress = useSharedValue(0);
+        const inputHeight = scaled(40);
 
         const borderColor = colors.border;
         const ringColor = colors.ring;
@@ -56,31 +57,32 @@ export const Input = React.forwardRef<TextInput, InputProps>(
                 {label && (
                     <Text className="text-sm font-medium" style={{ fontSize: scaled(14) }}>{label}</Text>
                 )}
-                <Animated.View
-                    style={[containerAnimatedStyle, { backgroundColor: colors.background, height: scaled(40) }]}
-                    className="justify-center rounded-md border"
-                >
-                    <TextInput
-                        ref={ref}
-                        className={cn(
-                            'px-3 text-base',
-                            className
-                        )}
-                        style={{
-                            includeFontPadding: false,
-                            textAlignVertical: 'center',
-                            lineHeight: scaled(16),
-                            fontSize: scaled(16),
-                            paddingTop: 0,
-                            paddingBottom: 0,
-                            color: colors.foreground,
-                        }}
-                        placeholderTextColor={colors.mutedForeground}
-                        onFocus={handleFocus}
-                        onBlur={handleBlur}
-                        {...props}
-                    />
-                </Animated.View>
+                <View className="rounded-md border overflow-hidden" style={{ borderWidth: 0 }}>
+                    <Animated.View
+                        style={[containerAnimatedStyle, { backgroundColor: colors.background, height: inputHeight, borderWidth: 1, borderRadius: 6 }]}
+                    >
+                        <TextInput
+                            ref={ref}
+                            className={cn(
+                                'px-3',
+                                className
+                            )}
+                            style={{
+                                height: inputHeight,
+                                includeFontPadding: false,
+                                textAlignVertical: 'center',
+                                lineHeight: scaled(20),
+                                fontSize: scaled(16),
+                                paddingVertical: 0,
+                                color: colors.foreground,
+                            }}
+                            placeholderTextColor={colors.mutedForeground}
+                            onFocus={handleFocus}
+                            onBlur={handleBlur}
+                            {...props}
+                        />
+                    </Animated.View>
+                </View>
                 {(error || supportingText) && (
                     <Text
                         className="text-xs"

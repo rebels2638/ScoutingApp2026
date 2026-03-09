@@ -1,20 +1,31 @@
 import { BarChart, Leaderboard, LineChart, PieChart, RadarChart, StatCard } from '@/components/data';
+import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { InfoButton } from '@/components/ui/InfoButton';
 import { Select } from '@/components/ui/Select';
 import { Text } from '@/components/ui/Text';
+import {
+    average,
+    buildMatchTrend,
+    buildTeamAnalytics,
+    getAutoFuelPoints,
+    getEndgamePoints,
+    getInactiveFuelEstimate,
+    getTeleopFuelEstimate,
+} from '@/lib/analysisCore';
+import { getCachedPitProfiles, type PitTeamProfile } from '@/lib/backend/pitScouting';
 import type { FieldDefinition } from '@/lib/definitions';
+import {
+    buildPitProfileMap,
+    getPitProfileForEntry,
+    getResolvedPrimaryFuelSource,
+} from '@/lib/pitScoutingOverlay';
 import { getScoutingEntries } from '@/lib/storage';
 import { ensureContrast, ThemedScrollView, ThemedView, useThemeColors } from '@/lib/theme';
-import type {
-    ClimbLevel,
-    FuelRange,
-    FuelScoredBucket,
-    MatchType,
-    ScoutingEntry,
-} from '@/lib/types';
+import type { MatchType, ScoutingEntry } from '@/lib/types';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { Activity, Gauge, ShieldCheck, TrendingUp } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
@@ -31,59 +42,6 @@ type TeamSortMetric =
     | 'climbSuccessRatePct'
     | 'reliabilityScore';
 type ComparisonScope = 'all' | 'top' | 'selected';
-
-interface TeamAnalysis {
-    teamNumber: number;
-    matchCount: number;
-    autoFuelAvg: number;
-    autoFuelHigh: number;
-    autoTowerAvg: number;
-    autoPointsAvg: number;
-    teleopCyclesAvg: number;
-    teleopCyclesHigh: number;
-    teleopFuelAvg: number;
-    teleopFuelHigh: number;
-    inactiveFuelAvg: number;
-    inactiveWasteAvg: number;
-    climbAttemptRate: number;
-    climbSuccessRatePct: number;
-    towerReliabilityPct: number;
-    strategicReliabilityPct: number;
-    mechanicalReliabilityPct: number;
-    totalFuelScoredAnyHubAvg: number;
-    avgClimbLevel: number;
-    endgamePointsAvg: number;
-    endgamePointsHigh: number;
-    teleopTowerAvg: number;
-    breakdownRate: number;
-    mobilityIssueRate: number;
-    cardRate: number;
-    reliabilityScore: number;
-    scoringPotential: number;
-    impactScore: number;
-}
-
-const AUTO_FUEL_POINTS: Record<FuelScoredBucket, number> = {
-    '0': 0,
-    '1-3': 2,
-    '4-8': 6,
-    '9+': 10,
-};
-
-const TELEOP_FUEL_ESTIMATE: Record<FuelRange, number> = {
-    '1-4': 2.5,
-    '5-8': 6.5,
-    '9-12': 10.5,
-    '13-16': 14.5,
-    '17+': 18,
-};
-
-const ENDGAME_TOWER_POINTS: Record<ClimbLevel, number> = {
-    None: 0,
-    'Level 1': 10,
-    'Level 2': 20,
-    'Level 3': 30,
-};
 
 const ANALYSIS_TERM_HELP: Array<{ term: string; definition: FieldDefinition }> = [
     {
@@ -157,202 +115,18 @@ const ANALYSIS_FORMULA_OVERVIEW = [
     'SR% = Fuel Scored in Active HUB / Fuel Scored in Any HUB State',
     'TR% = Successful Climbs / Attempted Climbs',
     'RP Thresholds: Active Fuel 100 (Energized), 360 (Supercharged), Tower 50 (Traversal)',
-    'Fuel totals use bucket/cycle estimates from scouting entries.',
+    'Fuel totals use bucket/cycle estimates from scouting entries and synced pit profiles when pit-managed fields are missing.',
     'If Fuel Shots Attempted is left at 0, MR% falls back to cycle-based fuel estimates.',
 ];
 const TOP_COMPARISON_TEAM_LIMIT = 8;
-
-function average(values: number[]): number {
-    if (values.length === 0) return 0;
-    return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function max(values: number[]): number {
-    if (values.length === 0) return 0;
-    return Math.max(...values);
-}
-
-function clamp(value: number, minValue: number, maxValue: number): number {
-    return Math.min(Math.max(value, minValue), maxValue);
-}
-
-function climbLevelToNumber(level: ClimbLevel): number {
-    switch (level) {
-        case 'Level 1':
-            return 1;
-        case 'Level 2':
-            return 2;
-        case 'Level 3':
-            return 3;
-        case 'None':
-        default:
-            return 0;
-    }
-}
-
-function getAutoFuelPoints(entry: ScoutingEntry): number {
-    return AUTO_FUEL_POINTS[entry.autonomous.fuelScoredBucket];
-}
-
-function getAutoClimbPoints(entry: ScoutingEntry): number {
-    return entry.autonomous.climbResult === 'Level 1 success' && entry.autonomous.eligibleForAutoClimbPoints
-        ? 15
-        : 0;
-}
-
-function getTeleopFuelEstimate(entry: ScoutingEntry): number {
-    const typicalFuelCarried = entry.teleop.typicalFuelCarried;
-    if (!typicalFuelCarried) {
-        return 0;
-    }
-
-    return entry.teleop.scoringCyclesActive * TELEOP_FUEL_ESTIMATE[typicalFuelCarried];
-}
-
-function getInactiveFuelEstimate(entry: ScoutingEntry): number {
-    const typicalFuelCarried = entry.teleop.typicalFuelCarried;
-    if (!typicalFuelCarried) {
-        return 0;
-    }
-
-    return entry.teleop.wastedCyclesInactive * TELEOP_FUEL_ESTIMATE[typicalFuelCarried];
-}
-
-function getEstimatedFuelShotsAttempted(entry: ScoutingEntry): number {
-    const fallbackTeleopEstimate = getTeleopFuelEstimate(entry) + getInactiveFuelEstimate(entry);
-    const recordedTeleopAttempts = entry.teleop.fuelShotsAttempted;
-    const teleopAttempts = recordedTeleopAttempts && recordedTeleopAttempts > 0
-        ? recordedTeleopAttempts
-        : fallbackTeleopEstimate;
-    return getAutoFuelPoints(entry) + Math.max(teleopAttempts, 0);
-}
-
-function getEndgamePoints(entry: ScoutingEntry): number {
-    if (!entry.endgame.attemptedClimb || entry.endgame.climbSuccessState !== 'Success') {
-        return 0;
-    }
-    return ENDGAME_TOWER_POINTS[entry.endgame.climbLevelAchieved];
-}
-
-function buildMatchTrend(
-    entries: ScoutingEntry[],
-    metric: (entry: ScoutingEntry) => number
-): { x: string; y: number }[] {
-    const byMatch = new Map<number, number[]>();
-    entries.forEach((entry) => {
-        const key = entry.matchMetadata.matchNumber;
-        const values = byMatch.get(key) ?? [];
-        values.push(metric(entry));
-        byMatch.set(key, values);
-    });
-
-    return Array.from(byMatch.entries())
-        .sort(([a], [b]) => a - b)
-        .map(([matchNumber, values]) => ({
-            x: `M${matchNumber}`,
-            y: average(values),
-        }));
-}
-
-function buildTeamAnalytics(entries: ScoutingEntry[]): TeamAnalysis[] {
-    const byTeam = new Map<number, ScoutingEntry[]>();
-
-    entries.forEach((entry) => {
-        const teamNumber = entry.matchMetadata.teamNumber;
-        const teamEntries = byTeam.get(teamNumber) ?? [];
-        teamEntries.push(entry);
-        byTeam.set(teamNumber, teamEntries);
-    });
-
-    return Array.from(byTeam.entries())
-        .map(([teamNumber, teamEntries]) => {
-            const matchCount = teamEntries.length;
-
-            const autoFuelValues = teamEntries.map(getAutoFuelPoints);
-            const autoTowerValues = teamEntries.map(getAutoClimbPoints);
-            const teleopCycleValues = teamEntries.map((entry) => entry.teleop.scoringCyclesActive);
-            const teleopFuelValues = teamEntries.map(getTeleopFuelEstimate);
-            const inactiveFuelValues = teamEntries.map(getInactiveFuelEstimate);
-            const inactiveWasteValues = teamEntries.map((entry) => entry.teleop.wastedCyclesInactive);
-            const teleopTowerValues = teamEntries.map(getEndgamePoints);
-
-            const climbAttempts = teamEntries.filter((entry) => entry.endgame.attemptedClimb);
-            const climbSuccesses = climbAttempts.filter((entry) => entry.endgame.climbSuccessState === 'Success');
-            const climbAttemptRate = matchCount > 0 ? climbAttempts.length / matchCount : 0;
-            const towerReliabilityPct = climbAttempts.length > 0
-                ? (climbSuccesses.length / climbAttempts.length) * 100
-                : 0;
-            const climbSuccessRatePct = towerReliabilityPct;
-
-            const breakdownRate = teamEntries.filter((entry) => entry.endgame.breakdown).length / matchCount;
-            const mobilityIssueRate = teamEntries.filter((entry) => entry.endgame.mobilityIssues !== 'None').length / matchCount;
-            const cardRate = teamEntries.filter((entry) => entry.endgame.cards.some((card) => card !== 'None')).length / matchCount;
-
-            const totalAutoFuel = autoFuelValues.reduce((sum, value) => sum + value, 0);
-            const totalTeleopFuel = teleopFuelValues.reduce((sum, value) => sum + value, 0);
-            const totalInactiveFuel = inactiveFuelValues.reduce((sum, value) => sum + value, 0);
-            const totalFuelScoredAnyHub = totalAutoFuel + totalTeleopFuel + totalInactiveFuel;
-            const totalFuelScoredActiveHub = totalAutoFuel + totalTeleopFuel;
-            const totalFuelShotsAttempted = teamEntries.reduce(
-                (sum, entry) => sum + getEstimatedFuelShotsAttempted(entry),
-                0
-            );
-            const normalizedShotsAttempted = Math.max(totalFuelShotsAttempted, totalFuelScoredAnyHub);
-            const mechanicalReliabilityPct = normalizedShotsAttempted > 0
-                ? clamp((totalFuelScoredAnyHub / normalizedShotsAttempted) * 100, 0, 100)
-                : 0;
-            const strategicReliabilityPct = totalFuelScoredAnyHub > 0
-                ? clamp((totalFuelScoredActiveHub / totalFuelScoredAnyHub) * 100, 0, 100)
-                : 0;
-
-            const autoFuelAvg = average(autoFuelValues);
-            const autoTowerAvg = average(autoTowerValues);
-            const teleopFuelAvg = average(teleopFuelValues);
-            const teleopTowerAvg = average(teleopTowerValues);
-            const autoPointsAvg = autoFuelAvg + autoTowerAvg;
-            const endgamePointsAvg = teleopTowerAvg;
-            const scoringPotential = autoFuelAvg + teleopFuelAvg + autoTowerAvg + teleopTowerAvg;
-            const impactScore = autoFuelAvg * 1.5 + teleopFuelAvg + autoTowerAvg + teleopTowerAvg;
-            const reliabilityScore = strategicReliabilityPct;
-
-            return {
-                teamNumber,
-                matchCount,
-                autoFuelAvg,
-                autoFuelHigh: max(autoFuelValues),
-                autoTowerAvg,
-                autoPointsAvg,
-                teleopCyclesAvg: average(teleopCycleValues),
-                teleopCyclesHigh: max(teleopCycleValues),
-                teleopFuelAvg,
-                teleopFuelHigh: max(teleopFuelValues),
-                inactiveFuelAvg: average(inactiveFuelValues),
-                inactiveWasteAvg: average(inactiveWasteValues),
-                climbAttemptRate,
-                climbSuccessRatePct,
-                towerReliabilityPct,
-                strategicReliabilityPct,
-                mechanicalReliabilityPct,
-                totalFuelScoredAnyHubAvg: average(teamEntries.map((entry) => getAutoFuelPoints(entry) + getTeleopFuelEstimate(entry) + getInactiveFuelEstimate(entry))),
-                avgClimbLevel: average(teamEntries.map((entry) => climbLevelToNumber(entry.endgame.climbLevelAchieved))),
-                endgamePointsAvg,
-                endgamePointsHigh: max(teleopTowerValues),
-                teleopTowerAvg,
-                breakdownRate,
-                mobilityIssueRate,
-                cardRate,
-                reliabilityScore,
-                scoringPotential,
-                impactScore,
-            };
-        })
-        .sort((a, b) => b.impactScore - a.impactScore);
-}
+const COMPARE_ROUTE_TEAM_LIMIT = 6;
 
 export default function AnalysisTab() {
     const colors = useThemeColors();
     const insets = useSafeAreaInsets();
+    const router = useRouter();
     const [entries, setEntries] = useState<ScoutingEntry[]>([]);
+    const [pitProfiles, setPitProfiles] = useState<PitTeamProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -366,23 +140,28 @@ export default function AnalysisTab() {
     const [sortMetric, setSortMetric] = useState<TeamSortMetric>('impactScore');
     const [showFormulaHelp, setShowFormulaHelp] = useState(false);
     const [showTermHelp, setShowTermHelp] = useState(false);
+    const pitProfilesByTeam = useMemo(() => buildPitProfileMap(pitProfiles), [pitProfiles]);
 
-    const loadEntries = async () => {
+    const loadEntries = useCallback(async () => {
         try {
-            const data = await getScoutingEntries();
+            const [data, cachedPitProfiles] = await Promise.all([
+                getScoutingEntries(),
+                getCachedPitProfiles(),
+            ]);
             setEntries(data);
+            setPitProfiles(cachedPitProfiles);
         } catch (error) {
             console.error('Error loading analysis entries:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
             void loadEntries();
-        }, [])
+        }, [loadEntries])
     );
 
     const onRefresh = () => {
@@ -399,7 +178,10 @@ export default function AnalysisTab() {
         [entries, matchTypeFilter]
     );
 
-    const teamAnalytics = useMemo(() => buildTeamAnalytics(scopedEntries), [scopedEntries]);
+    const teamAnalytics = useMemo(
+        () => buildTeamAnalytics(scopedEntries, pitProfilesByTeam),
+        [pitProfilesByTeam, scopedEntries]
+    );
 
     const sortedTeams = useMemo(() => {
         const minSP = Number(minScoringPotential);
@@ -517,6 +299,13 @@ export default function AnalysisTab() {
         setSelectedComparisonTeams([]);
     }, []);
 
+    const compareRouteTeamNumbers = useMemo(
+        () => selectedComparisonTeams.slice(0, COMPARE_ROUTE_TEAM_LIMIT),
+        [selectedComparisonTeams]
+    );
+
+    const canOpenCompare = comparisonScope === 'selected' && compareRouteTeamNumbers.length >= 2;
+
     const leaderboardMetricLabel = useMemo(() => {
         switch (sortMetric) {
             case 'impactScore':
@@ -621,7 +410,7 @@ export default function AnalysisTab() {
             {
                 label: 'Teleop Active Fuel',
                 color: analysisSemanticColors.success,
-                data: buildMatchTrend(comparisonEntries, getTeleopFuelEstimate),
+                data: buildMatchTrend(comparisonEntries, (entry) => getTeleopFuelEstimate(entry, pitProfilesByTeam)),
             },
             {
                 label: 'Endgame Pts',
@@ -629,21 +418,49 @@ export default function AnalysisTab() {
                 data: buildMatchTrend(comparisonEntries, getEndgamePoints),
             },
         ],
-        [analysisSemanticColors.info, analysisSemanticColors.success, analysisSemanticColors.warning, comparisonEntries]
+        [
+            analysisSemanticColors.info,
+            analysisSemanticColors.success,
+            analysisSemanticColors.warning,
+            comparisonEntries,
+            pitProfilesByTeam,
+        ]
     );
 
     const sourceDistribution = useMemo(() => {
-        const sourceOptions: Array<NonNullable<ScoutingEntry['teleop']['primaryFuelSource']>> = [
-            'Neutral Zone',
-            'Depot',
-            'Outpost feed',
-            'Mixed',
-        ];
-        return sourceOptions.map((source) => ({
-            label: source,
-            value: comparisonEntries.filter((entry) => entry.teleop.primaryFuelSource === source).length,
-        }));
-    }, [comparisonEntries]);
+        const preferredOrder = ['Neutral Zone', 'Depot', 'Outpost feed', 'Mixed'];
+        const counts = new Map<string, number>();
+
+        for (const entry of comparisonEntries) {
+            const pitProfile = getPitProfileForEntry(entry, pitProfilesByTeam);
+            const source = getResolvedPrimaryFuelSource(entry, pitProfile);
+            if (!source) {
+                continue;
+            }
+
+            counts.set(source, (counts.get(source) ?? 0) + 1);
+        }
+
+        return Array.from(counts.entries())
+            .sort(([leftLabel], [rightLabel]) => {
+                const leftIndex = preferredOrder.indexOf(leftLabel);
+                const rightIndex = preferredOrder.indexOf(rightLabel);
+
+                if (leftIndex !== -1 || rightIndex !== -1) {
+                    if (leftIndex === -1) {
+                        return 1;
+                    }
+                    if (rightIndex === -1) {
+                        return -1;
+                    }
+
+                    return leftIndex - rightIndex;
+                }
+
+                return leftLabel.localeCompare(rightLabel);
+            })
+            .map(([label, value]) => ({ label, value }));
+    }, [comparisonEntries, pitProfilesByTeam]);
 
     const climbDistribution = useMemo(() => {
         return [
@@ -769,7 +586,7 @@ export default function AnalysisTab() {
                 color: analysisSemanticColors.success,
                 data: selectedTeamEntries.map((entry) => ({
                     x: `M${entry.matchMetadata.matchNumber}`,
-                    y: getTeleopFuelEstimate(entry),
+                    y: getTeleopFuelEstimate(entry, pitProfilesByTeam),
                 })),
             },
             {
@@ -781,7 +598,14 @@ export default function AnalysisTab() {
                 })),
             },
         ];
-    }, [analysisSemanticColors.info, analysisSemanticColors.success, analysisSemanticColors.warning, selectedTeamEntries, selectedTeamStats]);
+    }, [
+        analysisSemanticColors.info,
+        analysisSemanticColors.success,
+        analysisSemanticColors.warning,
+        pitProfilesByTeam,
+        selectedTeamEntries,
+        selectedTeamStats,
+    ]);
 
     const matchTypeOptions = [
         { label: 'All Match Types', value: 'All' as const },
@@ -1006,6 +830,31 @@ export default function AnalysisTab() {
                                     )}
                                 </View>
                             )}
+                            <View className="gap-2">
+                                <Button
+                                    variant={canOpenCompare ? 'default' : 'outline'}
+                                    disabled={!canOpenCompare}
+                                    onPress={() => {
+                                        router.push({
+                                            pathname: '/compare',
+                                            params: {
+                                                teams: compareRouteTeamNumbers.join(','),
+                                            },
+                                        });
+                                    }}
+                                >
+                                    {canOpenCompare ? `Compare ${compareRouteTeamNumbers.length} Teams` : 'Select teams to compare'}
+                                </Button>
+                                <Text style={{ color: colors.mutedForeground }} className="text-xs">
+                                    {comparisonScope !== 'selected'
+                                        ? 'Switch comparison type to Selected Teams to open a team vs team based comparison window.'
+                                        : selectedComparisonTeams.length < 2
+                                            ? 'Choose at least two teams to compare robots.'
+                                            : selectedComparisonTeams.length > COMPARE_ROUTE_TEAM_LIMIT
+                                                ? `The compare screen opens the first ${COMPARE_ROUTE_TEAM_LIMIT} selected teams.`
+                                                : 'Open a window with team vs team comparisons.'}
+                                </Text>
+                            </View>
                             <View className="mt-1 gap-2">
                                 <Text style={{ color: colors.mutedForeground }} className="text-xs font-medium">
                                     Metric Help
@@ -1311,7 +1160,7 @@ export default function AnalysisTab() {
                                                     </Text>
                                                 </View>
                                                 <Text style={{ color: colors.mutedForeground }} className="mt-1 text-xs">
-                                                    Auto Fuel {getAutoFuelPoints(entry).toFixed(0)} • Tele Active Fuel {getTeleopFuelEstimate(entry).toFixed(1)} • Inactive Fuel {getInactiveFuelEstimate(entry).toFixed(1)} • Tower {getEndgamePoints(entry).toFixed(0)} pts
+                                                    Auto Fuel {getAutoFuelPoints(entry).toFixed(0)} • Tele Active Fuel {getTeleopFuelEstimate(entry, pitProfilesByTeam).toFixed(1)} • Inactive Fuel {getInactiveFuelEstimate(entry, pitProfilesByTeam).toFixed(1)} • Tower {getEndgamePoints(entry).toFixed(0)} pts
                                                 </Text>
                                             </View>
                                         ))}

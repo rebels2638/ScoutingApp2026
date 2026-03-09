@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/CustomTabBar';
 import { useTheme } from '@/lib/theme';
 import { Tabs } from 'expo-router';
-import { BarChart3, ClipboardList, Database, Settings } from 'lucide-react-native';
+import { BarChart3, ClipboardCheck, ClipboardList, Database, Settings } from 'lucide-react-native';
 import React from 'react';
 
 function TabBarIcon({ icon: Icon, color, size }: { icon: typeof ClipboardList; color: string; size?: number }) {
@@ -33,6 +33,13 @@ export default function TabLayout() {
                 options={{
                     title: 'Scout',
                     tabBarIcon: ({ color, size }) => <TabBarIcon icon={ClipboardList} color={color} size={size} />,
+                }}
+            />
+            <Tabs.Screen
+                name="assignments"
+                options={{
+                    title: 'Assign',
+                    tabBarIcon: ({ color, size }) => <TabBarIcon icon={ClipboardCheck} color={color} size={size} />,
                 }}
             />
             <Tabs.Screen

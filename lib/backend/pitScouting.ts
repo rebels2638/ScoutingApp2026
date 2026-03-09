@@ -2,55 +2,76 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Query, type Models } from 'react-native-appwrite';
 
 import { warnWithError } from '../error-utils';
-import type {
-    ClimbLevel,
-    DrivetrainType,
-    FuelRange,
-    PreloadFullnessReference,
-    PrimaryFuelSource,
-} from '../types';
 import { getAppwriteDatabases } from './client';
 import { getBackendConfig } from './config';
 
 const PIT_DATA_CACHE_KEY = '@agath_pit_data_cache';
 const PIT_DATA_LAST_FETCHED_KEY = '@agath_pit_data_last_fetched';
+const PIT_DATA_CACHE_VERSION_KEY = '@agath_pit_data_cache_version';
+const PIT_DATA_CACHE_VERSION = '3';
 const PIT_DATA_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const PIT_DATA_PAGE_LIMIT = 100;
 
-const drivetrainTypes: readonly DrivetrainType[] = ['Swerve', 'West Coast', 'Mecanum', 'Tank', 'Other'];
-const fuelRanges: readonly FuelRange[] = ['1-4', '5-8', '9-12', '13-16', '17+'];
-const primaryFuelSources: readonly PrimaryFuelSource[] = ['Neutral Zone', 'Depot', 'Outpost feed', 'Mixed'];
-const climbLevels: readonly ClimbLevel[] = ['None', 'Level 1', 'Level 2', 'Level 3'];
-const preloadFullnessReferences: readonly PreloadFullnessReference[] = [
-    'About half',
-    'About three-quarters',
-    'Completely full',
-];
+const truthyTextValues = new Set(['true', '1', 'yes', 'y']);
+const falsyTextValues = new Set(['false', '0', 'no', 'n']);
+const teamNumberKeys = ['team_num', 'team_number', 'teamNumber', 'team'] as const;
+const drivetrainTypeKeys = ['drivetrain_type', 'drivetrainType', 'drivetrain'] as const;
+const typicalPreloadCountKeys = ['typical_preload_count', 'typicalPreloadCount', 'preload_count', 'preloadCount'] as const;
+const maxFuelCapacityKeys = ['max_fuel_capacity', 'maxFuelCapacity'] as const;
+const typicalFuelCarriedKeys = ['typical_fuel_carried', 'typicalFuelCarried'] as const;
+const primaryFuelSourceKeys = ['primary_fuel_source', 'primaryFuelSource'] as const;
+const canFitTrenchKeys = ['can_fit_trench', 'canFitTrench'] as const;
+const climbCapabilityKeys = ['climb_capability', 'climbCapability'] as const;
+const estimatedClimbTimeKeys = ['estimated_climb_time', 'estimatedClimbTime'] as const;
+const autoRoutinesKeys = ['auto_routines', 'autoRoutines'] as const;
+const plansDefenseKeys = ['plans_defense', 'plansDefense'] as const;
+const knownIssuesKeys = ['known_issues', 'knownIssues'] as const;
+const preloadFullnessRefKeys = ['preload_fullness_ref', 'preloadFullnessRef'] as const;
+const maxObservedFuelKeys = ['max_observed_fuel', 'maxObservedFuel'] as const;
 
 type UnknownRecord = Record<string, unknown>;
 type PitScoutingDocument = Models.DefaultDocument;
+type PitDataRefreshListener = () => void;
+
+interface PitTeamProfileCandidate {
+    profile: PitTeamProfile;
+    requiredFieldCount: number;
+    populatedFieldCount: number;
+    updatedAtMs: number;
+}
 
 export interface PitTeamProfile {
     teamNumber: number;
-    drivetrainType: DrivetrainType | null;
+    drivetrainType: string | null;
     typicalPreloadCount: number | null;
-    maxFuelCapacity: FuelRange | null;
-    typicalFuelCarried: FuelRange | null;
-    primaryFuelSource: PrimaryFuelSource | null;
+    maxFuelCapacity: string | null;
+    typicalFuelCarried: string | null;
+    primaryFuelSource: string | null;
     canFitTrench: boolean | null;
-    climbCapability: ClimbLevel | null;
+    climbCapability: string | null;
     estimatedClimbTime: number | null;
     autoRoutines: string | null;
     plansDefense: boolean | null;
     knownIssues: string | null;
-    preloadFullnessRef: PreloadFullnessReference | null;
-    maxObservedFuel: FuelRange | null;
+    preloadFullnessRef: string | null;
+    maxObservedFuel: string | null;
 }
 
 let pendingPitRefresh: Promise<PitTeamProfile[]> | null = null;
+const pitDataRefreshListeners = new Set<PitDataRefreshListener>();
 
 function isRecord(value: unknown): value is UnknownRecord {
     return typeof value === 'object' && value !== null;
+}
+
+function getFirstValue(record: UnknownRecord, keys: readonly string[]): unknown {
+    for (const key of keys) {
+        if (key in record) {
+            return record[key];
+        }
+    }
+
+    return undefined;
 }
 
 function toStringOrNull(value: unknown): string | null {
@@ -63,49 +84,147 @@ function toStringOrNull(value: unknown): string | null {
 }
 
 function toIntOrNull(value: unknown): number | null {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return null;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.trunc(value);
     }
 
-    return Math.trunc(value);
-}
-
-function toBoolOrNull(value: unknown): boolean | null {
-    return typeof value === 'boolean' ? value : null;
-}
-
-function toOptionOrNull<T extends string>(value: unknown, options: readonly T[]): T | null {
     const text = toStringOrNull(value);
     if (!text) {
         return null;
     }
 
-    return options.find((option) => option === text) ?? null;
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed)) {
+        return null;
+    }
+
+    return Math.trunc(parsed);
 }
 
-function mapDocumentToProfile(doc: PitScoutingDocument): PitTeamProfile | null {
+function toBoolOrNull(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+
+    if (typeof value === 'number') {
+        if (value === 1) {
+            return true;
+        }
+        if (value === 0) {
+            return false;
+        }
+    }
+
+    const text = toStringOrNull(value)?.toLowerCase();
+    if (!text) {
+        return null;
+    }
+
+    if (truthyTextValues.has(text)) {
+        return true;
+    }
+    if (falsyTextValues.has(text)) {
+        return false;
+    }
+
+    return null;
+}
+
+function countRequiredPitFields(profile: PitTeamProfile): number {
+    return [
+        profile.typicalPreloadCount,
+        profile.typicalFuelCarried,
+        profile.primaryFuelSource,
+        profile.canFitTrench,
+    ].filter((value) => value !== null).length;
+}
+
+function countPopulatedPitFields(profile: PitTeamProfile): number {
+    return [
+        profile.drivetrainType,
+        profile.typicalPreloadCount,
+        profile.maxFuelCapacity,
+        profile.typicalFuelCarried,
+        profile.primaryFuelSource,
+        profile.canFitTrench,
+        profile.climbCapability,
+        profile.estimatedClimbTime,
+        profile.autoRoutines,
+        profile.plansDefense,
+        profile.knownIssues,
+        profile.preloadFullnessRef,
+        profile.maxObservedFuel,
+    ].filter((value) => value !== null).length;
+}
+
+function toTimestampMs(value: string | undefined): number {
+    if (!value) {
+        return 0;
+    }
+
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shouldPreferPitProfile(
+    nextProfile: PitTeamProfile,
+    currentProfile: PitTeamProfile
+): boolean {
+    const nextRequiredFieldCount = countRequiredPitFields(nextProfile);
+    const currentRequiredFieldCount = countRequiredPitFields(currentProfile);
+    if (nextRequiredFieldCount !== currentRequiredFieldCount) {
+        return nextRequiredFieldCount > currentRequiredFieldCount;
+    }
+
+    const nextPopulatedFieldCount = countPopulatedPitFields(nextProfile);
+    const currentPopulatedFieldCount = countPopulatedPitFields(currentProfile);
+    return nextPopulatedFieldCount >= currentPopulatedFieldCount;
+}
+
+function shouldPreferPitProfileCandidate(
+    nextCandidate: PitTeamProfileCandidate,
+    currentCandidate: PitTeamProfileCandidate
+): boolean {
+    if (nextCandidate.requiredFieldCount !== currentCandidate.requiredFieldCount) {
+        return nextCandidate.requiredFieldCount > currentCandidate.requiredFieldCount;
+    }
+    if (nextCandidate.populatedFieldCount !== currentCandidate.populatedFieldCount) {
+        return nextCandidate.populatedFieldCount > currentCandidate.populatedFieldCount;
+    }
+
+    return nextCandidate.updatedAtMs >= currentCandidate.updatedAtMs;
+}
+
+function mapDocumentToProfile(doc: PitScoutingDocument): PitTeamProfileCandidate | null {
     const record = doc as UnknownRecord;
-    const teamNumber = toIntOrNull(record.team_num);
+    const teamNumber = toIntOrNull(getFirstValue(record, teamNumberKeys));
 
     if (teamNumber == null || teamNumber < 1) {
         return null;
     }
 
-    return {
+    const profile: PitTeamProfile = {
         teamNumber,
-        drivetrainType: toOptionOrNull(record.drivetrain_type, drivetrainTypes),
-        typicalPreloadCount: toIntOrNull(record.typical_preload_count),
-        maxFuelCapacity: toOptionOrNull(record.max_fuel_capacity, fuelRanges),
-        typicalFuelCarried: toOptionOrNull(record.typical_fuel_carried, fuelRanges),
-        primaryFuelSource: toOptionOrNull(record.primary_fuel_source, primaryFuelSources),
-        canFitTrench: toBoolOrNull(record.can_fit_trench),
-        climbCapability: toOptionOrNull(record.climb_capability, climbLevels),
-        estimatedClimbTime: toIntOrNull(record.estimated_climb_time),
-        autoRoutines: toStringOrNull(record.auto_routines),
-        plansDefense: toBoolOrNull(record.plans_defense),
-        knownIssues: toStringOrNull(record.known_issues),
-        preloadFullnessRef: toOptionOrNull(record.preload_fullness_ref, preloadFullnessReferences),
-        maxObservedFuel: toOptionOrNull(record.max_observed_fuel, fuelRanges),
+        drivetrainType: toStringOrNull(getFirstValue(record, drivetrainTypeKeys)),
+        typicalPreloadCount: toIntOrNull(getFirstValue(record, typicalPreloadCountKeys)),
+        maxFuelCapacity: toStringOrNull(getFirstValue(record, maxFuelCapacityKeys)),
+        typicalFuelCarried: toStringOrNull(getFirstValue(record, typicalFuelCarriedKeys)),
+        primaryFuelSource: toStringOrNull(getFirstValue(record, primaryFuelSourceKeys)),
+        canFitTrench: toBoolOrNull(getFirstValue(record, canFitTrenchKeys)),
+        climbCapability: toStringOrNull(getFirstValue(record, climbCapabilityKeys)),
+        estimatedClimbTime: toIntOrNull(getFirstValue(record, estimatedClimbTimeKeys)),
+        autoRoutines: toStringOrNull(getFirstValue(record, autoRoutinesKeys)),
+        plansDefense: toBoolOrNull(getFirstValue(record, plansDefenseKeys)),
+        knownIssues: toStringOrNull(getFirstValue(record, knownIssuesKeys)),
+        preloadFullnessRef: toStringOrNull(getFirstValue(record, preloadFullnessRefKeys)),
+        maxObservedFuel: toStringOrNull(getFirstValue(record, maxObservedFuelKeys)),
+    };
+
+    return {
+        profile,
+        requiredFieldCount: countRequiredPitFields(profile),
+        populatedFieldCount: countPopulatedPitFields(profile),
+        updatedAtMs: toTimestampMs(doc.$updatedAt || doc.$createdAt),
     };
 }
 
@@ -121,10 +240,6 @@ function isNullableString(value: unknown): boolean {
     return value === null || typeof value === 'string';
 }
 
-function isNullableOption<T extends string>(value: unknown, options: readonly T[]): boolean {
-    return value === null || options.some((option) => option === value);
-}
-
 function isPitTeamProfile(value: unknown): value is PitTeamProfile {
     if (!isRecord(value)) {
         return false;
@@ -134,19 +249,19 @@ function isPitTeamProfile(value: unknown): value is PitTeamProfile {
         typeof value.teamNumber === 'number' &&
         Number.isFinite(value.teamNumber) &&
         value.teamNumber > 0 &&
-        isNullableOption(value.drivetrainType, drivetrainTypes) &&
+        isNullableString(value.drivetrainType) &&
         isNullableNumber(value.typicalPreloadCount) &&
-        isNullableOption(value.maxFuelCapacity, fuelRanges) &&
-        isNullableOption(value.typicalFuelCarried, fuelRanges) &&
-        isNullableOption(value.primaryFuelSource, primaryFuelSources) &&
+        isNullableString(value.maxFuelCapacity) &&
+        isNullableString(value.typicalFuelCarried) &&
+        isNullableString(value.primaryFuelSource) &&
         isNullableBoolean(value.canFitTrench) &&
-        isNullableOption(value.climbCapability, climbLevels) &&
+        isNullableString(value.climbCapability) &&
         isNullableNumber(value.estimatedClimbTime) &&
         isNullableString(value.autoRoutines) &&
         isNullableBoolean(value.plansDefense) &&
         isNullableString(value.knownIssues) &&
-        isNullableOption(value.preloadFullnessRef, preloadFullnessReferences) &&
-        isNullableOption(value.maxObservedFuel, fuelRanges)
+        isNullableString(value.preloadFullnessRef) &&
+        isNullableString(value.maxObservedFuel)
     );
 }
 
@@ -163,8 +278,24 @@ function hasCachedPitProfiles(data: string | null): boolean {
 }
 
 async function cachePitProfiles(profiles: PitTeamProfile[]): Promise<void> {
-    await AsyncStorage.setItem(PIT_DATA_CACHE_KEY, JSON.stringify(profiles));
-    await AsyncStorage.setItem(PIT_DATA_LAST_FETCHED_KEY, Date.now().toString());
+    await Promise.all([
+        AsyncStorage.setItem(PIT_DATA_CACHE_KEY, JSON.stringify(profiles)),
+        AsyncStorage.setItem(PIT_DATA_LAST_FETCHED_KEY, Date.now().toString()),
+        AsyncStorage.setItem(PIT_DATA_CACHE_VERSION_KEY, PIT_DATA_CACHE_VERSION),
+    ]);
+}
+
+function notifyPitDataRefreshed(): void {
+    for (const listener of pitDataRefreshListeners) {
+        listener();
+    }
+}
+
+export function subscribeToPitDataRefresh(listener: PitDataRefreshListener): () => void {
+    pitDataRefreshListeners.add(listener);
+    return () => {
+        pitDataRefreshListeners.delete(listener);
+    };
 }
 
 async function refreshPitProfiles(): Promise<PitTeamProfile[]> {
@@ -175,6 +306,7 @@ async function refreshPitProfiles(): Promise<PitTeamProfile[]> {
     pendingPitRefresh = (async () => {
         const profiles = await fetchAllPitProfiles();
         await cachePitProfiles(profiles);
+        notifyPitDataRefreshed();
         return profiles;
     })();
 
@@ -193,7 +325,7 @@ export async function fetchAllPitProfiles(): Promise<PitTeamProfile[]> {
         return [];
     }
 
-    const profiles: PitTeamProfile[] = [];
+    const profilesByTeamNumber = new Map<number, PitTeamProfileCandidate>();
     let cursorAfter: string | null = null;
 
     while (true) {
@@ -208,11 +340,14 @@ export async function fetchAllPitProfiles(): Promise<PitTeamProfile[]> {
             queries,
         });
 
-        profiles.push(
-            ...response.documents
-                .map(mapDocumentToProfile)
-                .filter((profile): profile is PitTeamProfile => profile !== null)
-        );
+        for (const candidate of response.documents
+            .map(mapDocumentToProfile)
+            .filter((profile): profile is PitTeamProfileCandidate => profile !== null)) {
+            const existingCandidate = profilesByTeamNumber.get(candidate.profile.teamNumber);
+            if (!existingCandidate || shouldPreferPitProfileCandidate(candidate, existingCandidate)) {
+                profilesByTeamNumber.set(candidate.profile.teamNumber, candidate);
+            }
+        }
 
         if (response.documents.length < PIT_DATA_PAGE_LIMIT) {
             break;
@@ -226,13 +361,16 @@ export async function fetchAllPitProfiles(): Promise<PitTeamProfile[]> {
         cursorAfter = lastDocument.$id;
     }
 
-    return profiles;
+    return Array.from(profilesByTeamNumber.values(), (candidate) => candidate.profile);
 }
 
 export async function getCachedPitProfiles(): Promise<PitTeamProfile[]> {
     try {
-        const data = await AsyncStorage.getItem(PIT_DATA_CACHE_KEY);
-        if (!data) {
+        const [cacheVersion, data] = await Promise.all([
+            AsyncStorage.getItem(PIT_DATA_CACHE_VERSION_KEY),
+            AsyncStorage.getItem(PIT_DATA_CACHE_KEY),
+        ]);
+        if (cacheVersion !== PIT_DATA_CACHE_VERSION || !data) {
             return [];
         }
 
@@ -253,16 +391,29 @@ export async function getCachedPitProfileForTeam(teamNumber: number): Promise<Pi
     }
 
     const profiles = await getCachedPitProfiles();
-    return profiles.find((profile) => profile.teamNumber === teamNumber) ?? null;
+    let preferredProfile: PitTeamProfile | null = null;
+
+    for (const profile of profiles) {
+        if (profile.teamNumber !== teamNumber) {
+            continue;
+        }
+
+        if (!preferredProfile || shouldPreferPitProfile(profile, preferredProfile)) {
+            preferredProfile = profile;
+        }
+    }
+
+    return preferredProfile;
 }
 
 export async function shouldRefreshPitData(): Promise<boolean> {
-    const [lastFetchedValue, cachedProfilesValue] = await Promise.all([
+    const [cacheVersion, lastFetchedValue, cachedProfilesValue] = await Promise.all([
+        AsyncStorage.getItem(PIT_DATA_CACHE_VERSION_KEY),
         AsyncStorage.getItem(PIT_DATA_LAST_FETCHED_KEY),
         AsyncStorage.getItem(PIT_DATA_CACHE_KEY),
     ]);
 
-    if (!lastFetchedValue || !hasCachedPitProfiles(cachedProfilesValue)) {
+    if (cacheVersion !== PIT_DATA_CACHE_VERSION || !lastFetchedValue || !hasCachedPitProfiles(cachedProfilesValue)) {
         return true;
     }
 

@@ -4,7 +4,7 @@ import { useUIScale } from '@/lib/ui-scale';
 import { cn } from '@/lib/utils';
 import { Check, ChevronDown } from 'lucide-react-native';
 import * as React from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import Animated, {
     runOnJS,
     useAnimatedStyle,
@@ -29,6 +29,13 @@ export interface SelectProps<T = string> {
     className?: string;
 }
 
+interface DropdownFrame {
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+}
+
 export function Select<T extends string>({
     value,
     onValueChange,
@@ -40,17 +47,88 @@ export function Select<T extends string>({
 }: SelectProps<T>) {
     const colors = useThemeColors();
     const { scaled } = useUIScale();
+    const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+    const triggerRef = React.useRef<View>(null);
 
     const [modalVisible, setModalVisible] = React.useState(false);
     const [isAnimating, setIsAnimating] = React.useState(false);
+    const [dropdownFrame, setDropdownFrame] = React.useState<DropdownFrame | null>(null);
 
     const chevronRotation = useSharedValue(0);
 
     const modalScale = useSharedValue(0.95);
     const modalOpacity = useSharedValue(0);
+    const isWeb = Platform.OS === 'web';
+    const dropdownMargin = scaled(16);
+    const dropdownOffset = scaled(8);
+    const dropdownMaxHeight = scaled(320);
+    const dropdownMinHeight = scaled(140);
+
+    const updateDropdownFrame = React.useCallback(() => {
+        if (!isWeb) {
+            return;
+        }
+
+        triggerRef.current?.measureInWindow((x, y, width, height) => {
+            if (
+                ![x, y, width, height].every((entry) => Number.isFinite(entry)) ||
+                width <= 0 ||
+                height <= 0
+            ) {
+                setDropdownFrame(null);
+                return;
+            }
+
+            const maxAllowedWidth = Math.max(viewportWidth - dropdownMargin * 2, scaled(160));
+            const minPreferredWidth = Math.min(scaled(220), maxAllowedWidth);
+            const dropdownWidth = Math.min(Math.max(width, minPreferredWidth), maxAllowedWidth);
+            const availableBelow = Math.max(
+                viewportHeight - (y + height) - dropdownMargin - dropdownOffset,
+                dropdownMinHeight
+            );
+            const availableAbove = Math.max(
+                y - dropdownMargin - dropdownOffset,
+                dropdownMinHeight
+            );
+            const shouldOpenAbove = availableBelow < scaled(220) && availableAbove > availableBelow;
+            const maxHeight = Math.min(
+                dropdownMaxHeight,
+                shouldOpenAbove ? availableAbove : availableBelow
+            );
+            const left = Math.min(
+                Math.max(x, dropdownMargin),
+                Math.max(dropdownMargin, viewportWidth - dropdownWidth - dropdownMargin)
+            );
+            const top = shouldOpenAbove
+                ? Math.max(dropdownMargin, y - maxHeight - dropdownOffset)
+                : Math.min(
+                    Math.max(dropdownMargin, viewportHeight - maxHeight - dropdownMargin),
+                    y + height + dropdownOffset
+                );
+
+            setDropdownFrame({
+                top,
+                left,
+                width: dropdownWidth,
+                maxHeight,
+            });
+        });
+    }, [
+        dropdownMargin,
+        dropdownMaxHeight,
+        dropdownMinHeight,
+        dropdownOffset,
+        isWeb,
+        scaled,
+        viewportHeight,
+        viewportWidth,
+    ]);
 
     const openModal = React.useCallback(() => {
         if (disabled || isAnimating) return;
+        if (isWeb) {
+            updateDropdownFrame();
+        }
         setIsAnimating(true);
         setModalVisible(true);
         chevronRotation.value = withSpring(180, springConfigs.snappy);
@@ -58,7 +136,7 @@ export function Select<T extends string>({
         modalOpacity.value = withTiming(1, timingConfigs.fast, () => {
             runOnJS(setIsAnimating)(false);
         });
-    }, [disabled, isAnimating]);
+    }, [disabled, isAnimating, isWeb, updateDropdownFrame]);
 
     const closeModal = React.useCallback(() => {
         if (isAnimating) return;
@@ -68,6 +146,7 @@ export function Select<T extends string>({
         modalOpacity.value = withTiming(0, timingConfigs.fast, () => {
             runOnJS(setModalVisible)(false);
             runOnJS(setIsAnimating)(false);
+            runOnJS(setDropdownFrame)(null);
         });
     }, [isAnimating]);
 
@@ -80,7 +159,22 @@ export function Select<T extends string>({
         opacity: modalOpacity.value,
     }));
 
+    React.useEffect(() => {
+        if (!modalVisible || !isWeb) {
+            return;
+        }
+
+        const frame = requestAnimationFrame(() => {
+            updateDropdownFrame();
+        });
+
+        return () => {
+            cancelAnimationFrame(frame);
+        };
+    }, [isWeb, modalVisible, options.length, updateDropdownFrame, viewportHeight, viewportWidth]);
+
     const selectedOption = options.find((opt) => opt.value === value);
+    const shouldUseAnchoredDropdown = isWeb && dropdownFrame !== null;
 
     const handleOptionSelect = React.useCallback((optionValue: T) => {
         if (isAnimating) return;
@@ -93,31 +187,33 @@ export function Select<T extends string>({
             {label && (
                 <Text className="font-medium" style={{ fontSize: scaled(14) }}>{label}</Text>
             )}
-            <Pressable
-                onPress={openModal}
-                style={{
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    height: scaled(40),
-                    paddingHorizontal: scaled(12),
-                }}
-                className={cn(
-                    'flex-row items-center justify-between rounded-md border',
-                    disabled && 'opacity-50'
-                )}
-                disabled={disabled || isAnimating}
-            >
-                <Text
-                    style={{ color: selectedOption ? colors.foreground : colors.mutedForeground, fontSize: scaled(16) }}
-                    className="flex-1 mr-2"
-                    numberOfLines={1}
+            <View ref={triggerRef} collapsable={false}>
+                <Pressable
+                    onPress={openModal}
+                    style={{
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                        height: scaled(40),
+                        paddingHorizontal: scaled(12),
+                    }}
+                    className={cn(
+                        'flex-row items-center justify-between rounded-md border',
+                        disabled && 'opacity-50'
+                    )}
+                    disabled={disabled || isAnimating}
                 >
-                    {selectedOption?.label || placeholder}
-                </Text>
-                <Animated.View style={chevronAnimatedStyle}>
-                    <ChevronDown size={scaled(18)} color={colors.mutedForeground} />
-                </Animated.View>
-            </Pressable>
+                    <Text
+                        style={{ color: selectedOption ? colors.foreground : colors.mutedForeground, fontSize: scaled(16) }}
+                        className="mr-2 flex-1"
+                        numberOfLines={1}
+                    >
+                        {selectedOption?.label || placeholder}
+                    </Text>
+                    <Animated.View style={chevronAnimatedStyle}>
+                        <ChevronDown size={scaled(18)} color={colors.mutedForeground} />
+                    </Animated.View>
+                </Pressable>
+            </View>
 
             <Modal
                 visible={modalVisible}
@@ -126,7 +222,7 @@ export function Select<T extends string>({
                 onRequestClose={closeModal}
                 statusBarTranslucent
             >
-                <View className="flex-1 items-center justify-center">
+                <View className={shouldUseAnchoredDropdown ? 'flex-1' : 'flex-1 items-center justify-center'}>
                     <Animated.View
                         style={{ opacity: modalOpacity }}
                         className="absolute inset-0 bg-black/60"
@@ -144,13 +240,27 @@ export function Select<T extends string>({
                                 backgroundColor: colors.card,
                                 borderColor: colors.border,
                             },
+                            shouldUseAnchoredDropdown
+                                ? {
+                                    left: dropdownFrame.left,
+                                    maxHeight: dropdownFrame.maxHeight,
+                                    position: 'absolute',
+                                    top: dropdownFrame.top,
+                                    width: dropdownFrame.width,
+                                }
+                                : undefined,
                         ]}
-                        className="mx-6 w-full max-w-sm rounded-lg border p-1"
+                        className={cn(
+                            'rounded-lg border p-1',
+                            !shouldUseAnchoredDropdown && 'mx-6 w-full max-w-sm'
+                        )}
                     >
                         <ScrollView
-                            className="max-h-80"
+                            className={cn(!shouldUseAnchoredDropdown && 'max-h-80')}
+                            style={shouldUseAnchoredDropdown ? { maxHeight: dropdownFrame.maxHeight } : undefined}
                             keyboardShouldPersistTaps="handled"
                             scrollEnabled={!isAnimating}
+                            showsVerticalScrollIndicator
                         >
                             {options.map((option) => (
                                 <Pressable

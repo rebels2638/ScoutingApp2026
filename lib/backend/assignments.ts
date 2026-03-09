@@ -1,24 +1,59 @@
 import { Query, type Models } from 'react-native-appwrite';
 
+import type { AllianceColor, MatchType } from '../types';
 import { getAppwriteDatabases } from './client';
 import { requireBackendConfig } from './config';
 
 type AssignmentDocument = Models.DefaultDocument;
 type UnknownRecord = Record<string, unknown>;
+type PendingAssignmentsListener = (userId: string) => void;
+
+const pendingAssignmentsByUserId = new Map<string, PendingScoutingAssignment[]>();
+const pendingAssignmentListeners = new Set<PendingAssignmentsListener>();
 
 export interface PendingScoutingAssignment {
     id: string;
     matchNumber: number | null;
     teamNumber: number | null;
-    matchType: string | null;
-    allianceColor: string | null;
+    matchType: MatchType | null;
+    allianceColor: AllianceColor | null;
 }
 
 interface CompleteAssignmentForSubmissionParams {
     userId: string;
     matchNumber: number;
     teamNumber: number;
+    matchType: MatchType;
     pendingAssignments?: PendingScoutingAssignment[];
+}
+
+interface AssignmentMatchCandidate {
+    matchNumber: number;
+    teamNumber: number;
+    matchType: MatchType;
+}
+
+function notifyPendingAssignmentsUpdated(userId: string): void {
+    for (const listener of pendingAssignmentListeners) {
+        listener(userId);
+    }
+}
+
+function setCachedPendingAssignments(userId: string, assignments: PendingScoutingAssignment[]): void {
+    pendingAssignmentsByUserId.set(userId, assignments);
+    notifyPendingAssignmentsUpdated(userId);
+}
+
+function removeCachedAssignment(assignmentId: string): void {
+    for (const [userId, assignments] of pendingAssignmentsByUserId.entries()) {
+        const nextAssignments = assignments.filter((assignment) => assignment.id !== assignmentId);
+        if (nextAssignments.length === assignments.length) {
+            continue;
+        }
+
+        pendingAssignmentsByUserId.set(userId, nextAssignments);
+        notifyPendingAssignmentsUpdated(userId);
+    }
 }
 
 function getFirstValue(record: UnknownRecord, keys: string[]): unknown {
@@ -53,6 +88,40 @@ function toTrimmedString(value: unknown): string | null {
     return trimmed.length > 0 ? trimmed : null;
 }
 
+function toMatchType(value: unknown): MatchType | null {
+    const trimmedValue = toTrimmedString(value)?.toLowerCase();
+    if (!trimmedValue) {
+        return null;
+    }
+
+    if (trimmedValue === 'practice') {
+        return 'Practice';
+    }
+
+    if (trimmedValue === 'qualification' || trimmedValue === 'qualifications' || trimmedValue === 'qual') {
+        return 'Qualification';
+    }
+
+    if (trimmedValue === 'playoff' || trimmedValue === 'playoffs') {
+        return 'Playoff';
+    }
+
+    return null;
+}
+
+function toAllianceColor(value: unknown): AllianceColor | null {
+    const trimmedValue = toTrimmedString(value)?.toLowerCase();
+    if (trimmedValue === 'red') {
+        return 'Red';
+    }
+
+    if (trimmedValue === 'blue') {
+        return 'Blue';
+    }
+
+    return null;
+}
+
 function mapPendingAssignment(document: AssignmentDocument): PendingScoutingAssignment {
     const record = document as UnknownRecord;
 
@@ -60,19 +129,31 @@ function mapPendingAssignment(document: AssignmentDocument): PendingScoutingAssi
         id: document.$id,
         matchNumber: toPositiveInteger(getFirstValue(record, ['match_number', 'matchNumber', 'match'])),
         teamNumber: toPositiveInteger(getFirstValue(record, ['team_number', 'teamNumber', 'team'])),
-        matchType: toTrimmedString(getFirstValue(record, ['match_type', 'matchType'])),
-        allianceColor: toTrimmedString(getFirstValue(record, ['alliance_color', 'allianceColor', 'alliance'])),
+        matchType: toMatchType(getFirstValue(record, ['match_type', 'matchType'])),
+        allianceColor: toAllianceColor(getFirstValue(record, ['alliance_color', 'allianceColor', 'alliance'])),
     };
 }
 
-function findMatchingAssignment(
+export function matchesAssignment(
+    assignment: PendingScoutingAssignment,
+    candidate: AssignmentMatchCandidate
+): boolean {
+    if (assignment.matchNumber !== candidate.matchNumber || assignment.teamNumber !== candidate.teamNumber) {
+        return false;
+    }
+
+    if (!assignment.matchType) {
+        return true;
+    }
+
+    return assignment.matchType === candidate.matchType;
+}
+
+export function findMatchingAssignment(
     assignments: PendingScoutingAssignment[],
-    matchNumber: number,
-    teamNumber: number
+    candidate: AssignmentMatchCandidate
 ): PendingScoutingAssignment | null {
-    return assignments.find(
-        (assignment) => assignment.matchNumber === matchNumber && assignment.teamNumber === teamNumber
-    ) ?? null;
+    return assignments.find((assignment) => matchesAssignment(assignment, candidate)) ?? null;
 }
 
 export async function fetchPendingAssignments(userId: string): Promise<PendingScoutingAssignment[]> {
@@ -88,7 +169,20 @@ export async function fetchPendingAssignments(userId: string): Promise<PendingSc
         ],
     });
 
-    return response.documents.map(mapPendingAssignment);
+    const assignments = response.documents.map(mapPendingAssignment);
+    setCachedPendingAssignments(userId, assignments);
+    return assignments;
+}
+
+export function getCachedPendingAssignments(userId: string): PendingScoutingAssignment[] {
+    return pendingAssignmentsByUserId.get(userId)?.slice() ?? [];
+}
+
+export function subscribeToPendingAssignments(listener: PendingAssignmentsListener): () => void {
+    pendingAssignmentListeners.add(listener);
+    return () => {
+        pendingAssignmentListeners.delete(listener);
+    };
 }
 
 export async function markAssignmentCompleted(assignmentId: string): Promise<void> {
@@ -101,20 +195,30 @@ export async function markAssignmentCompleted(assignmentId: string): Promise<voi
             completed: true,
         },
     });
+    removeCachedAssignment(assignmentId);
 }
 
 export async function completeAssignmentForSubmission({
     userId,
     matchNumber,
     teamNumber,
+    matchType,
     pendingAssignments,
 }: CompleteAssignmentForSubmissionParams): Promise<boolean> {
     const assignments = pendingAssignments ?? (await fetchPendingAssignments(userId));
-    let match = findMatchingAssignment(assignments, matchNumber, teamNumber);
+    let match = findMatchingAssignment(assignments, {
+        matchNumber,
+        teamNumber,
+        matchType,
+    });
 
     if (!match && pendingAssignments) {
         const refreshedAssignments = await fetchPendingAssignments(userId);
-        match = findMatchingAssignment(refreshedAssignments, matchNumber, teamNumber);
+        match = findMatchingAssignment(refreshedAssignments, {
+            matchNumber,
+            teamNumber,
+            matchType,
+        });
     }
 
     if (!match) {

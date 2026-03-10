@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Query, type Models } from 'react-native-appwrite';
 
 import { warnWithError } from '../error-utils';
+import { isFuelCountLabel, sanitizeFuelCountLabel } from '../fuel';
 import { getAppwriteDatabases } from './client';
 import { getBackendConfig } from './config';
 
@@ -133,7 +134,9 @@ function toBoolOrNull(value: unknown): boolean | null {
 function countRequiredPitFields(profile: PitTeamProfile): number {
     return [
         profile.typicalPreloadCount,
-        profile.typicalFuelCarried,
+        profile.typicalFuelCarried !== null && isFuelCountLabel(profile.typicalFuelCarried)
+            ? profile.typicalFuelCarried
+            : null,
         profile.primaryFuelSource,
         profile.canFitTrench,
     ].filter((value) => value !== null).length;
@@ -208,7 +211,7 @@ function mapDocumentToProfile(doc: PitScoutingDocument): PitTeamProfileCandidate
         drivetrainType: toStringOrNull(getFirstValue(record, drivetrainTypeKeys)),
         typicalPreloadCount: toIntOrNull(getFirstValue(record, typicalPreloadCountKeys)),
         maxFuelCapacity: toStringOrNull(getFirstValue(record, maxFuelCapacityKeys)),
-        typicalFuelCarried: toStringOrNull(getFirstValue(record, typicalFuelCarriedKeys)),
+        typicalFuelCarried: sanitizeFuelCountLabel(toStringOrNull(getFirstValue(record, typicalFuelCarriedKeys))),
         primaryFuelSource: toStringOrNull(getFirstValue(record, primaryFuelSourceKeys)),
         canFitTrench: toBoolOrNull(getFirstValue(record, canFitTrenchKeys)),
         climbCapability: toStringOrNull(getFirstValue(record, climbCapabilityKeys)),
@@ -217,7 +220,7 @@ function mapDocumentToProfile(doc: PitScoutingDocument): PitTeamProfileCandidate
         plansDefense: toBoolOrNull(getFirstValue(record, plansDefenseKeys)),
         knownIssues: toStringOrNull(getFirstValue(record, knownIssuesKeys)),
         preloadFullnessRef: toStringOrNull(getFirstValue(record, preloadFullnessRefKeys)),
-        maxObservedFuel: toStringOrNull(getFirstValue(record, maxObservedFuelKeys)),
+        maxObservedFuel: sanitizeFuelCountLabel(toStringOrNull(getFirstValue(record, maxObservedFuelKeys))),
     };
 
     return {

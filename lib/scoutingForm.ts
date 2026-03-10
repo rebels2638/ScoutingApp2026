@@ -3,6 +3,7 @@ import * as React from 'react';
 import type { PendingScoutingAssignment } from './backend/assignments';
 import type { PitTeamProfile } from './backend/pitScouting';
 import { usePitData } from './backend/usePitData';
+import { isFuelCountLabel } from './fuel';
 import { createDefaultScoutingEntry, type ScoutingEntry } from './types';
 
 export type ScoutingFormData = Omit<ScoutingEntry, 'id' | 'timestamp' | 'syncStatus' | 'syncedAt'>;
@@ -51,6 +52,7 @@ function hasRequiredPitData(pitProfile: PitTeamProfile | null): boolean {
         pitProfile !== null &&
         pitProfile.typicalPreloadCount !== null &&
         pitProfile.typicalFuelCarried !== null &&
+        isFuelCountLabel(pitProfile.typicalFuelCarried) &&
         pitProfile.primaryFuelSource !== null &&
         pitProfile.canFitTrench !== null
     );

@@ -3,6 +3,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
+import { toCanonicalFuelRange } from './fuel';
 import {
     getLocalDataSnapshot,
     mergeLocalDataSnapshot,
@@ -22,7 +23,6 @@ const PRELOAD_FULLNESS_REFERENCE_VALUES: readonly PreloadFullnessReference[] = [
     'About three-quarters',
     'Completely full',
 ];
-const FUEL_RANGE_VALUES: readonly FuelRange[] = ['1-4', '5-8', '9-12', '13-16', '17+'];
 
 type UnknownRecord = Record<string, unknown>;
 type ManagedDataExportDestination = 'android-folder' | 'share-sheet' | 'download';
@@ -113,14 +113,7 @@ function toPreloadFullnessReference(value: unknown): PreloadFullnessReference | 
 }
 
 function toFuelRange(value: unknown): FuelRange | null {
-    const normalized = toStringOrNull(value);
-    if (!normalized) {
-        return null;
-    }
-
-    return FUEL_RANGE_VALUES.includes(normalized as FuelRange)
-        ? normalized as FuelRange
-        : null;
+    return toCanonicalFuelRange(toStringOrNull(value));
 }
 
 function derivePreloadFullnessReference(

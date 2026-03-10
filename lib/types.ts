@@ -1,6 +1,7 @@
 export type MatchType = 'Practice' | 'Qualification' | 'Playoff';
 export type AllianceColor = 'Red' | 'Blue';
 export type FuelScoredBucket = '0' | '1-3' | '4-8' | '9+';
+export type FuelCountLabel = string;
 export type AutoClimbResult = 'None' | 'Attempted (failed)' | 'Level 1 success';
 export type PreloadFullnessReference = 'About half' | 'About three-quarters' | 'Completely full';
 export type FuelRange = '1-4' | '5-8' | '9-12' | '13-16' | '17+';
@@ -23,7 +24,7 @@ export interface AutonomousData {
     preloadCount: number | null;
     leftStartingLine: boolean;
     crossedCenterLine: boolean;
-    fuelScoredBucket: FuelScoredBucket;
+    fuelScoredBucket: FuelCountLabel;
     climbResult: AutoClimbResult;
     eligibleForAutoClimbPoints: boolean;
     autoPath?: string;
@@ -38,7 +39,7 @@ export interface TeleopData {
     scoringCyclesActive: number;
     wastedCyclesInactive: number;
     fuelShotsAttempted?: number;
-    typicalFuelCarried: FuelRange | null;
+    typicalFuelCarried: FuelCountLabel | null;
     primaryFuelSource: PrimaryFuelSource | null;
     usesTrenchRoutes: boolean | null;
     playsDefense: boolean;

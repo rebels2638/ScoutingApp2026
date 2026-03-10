@@ -1,3 +1,4 @@
+import { estimateFuelCount, isLegacyAutoFuelBucket, sanitizeFuelCountLabel } from '@/lib/fuel';
 import {
     getEstimatedFuelPerCycle,
     getPitProfileForEntry,
@@ -85,7 +86,14 @@ export function climbLevelToNumber(level: ClimbLevel): number {
 }
 
 export function getAutoFuelPoints(entry: ScoutingEntry): number {
-    return AUTO_FUEL_POINTS[entry.autonomous.fuelScoredBucket];
+    const fuelScoredBucket = sanitizeFuelCountLabel(entry.autonomous.fuelScoredBucket);
+    if (!fuelScoredBucket) {
+        return 0;
+    }
+
+    return isLegacyAutoFuelBucket(fuelScoredBucket)
+        ? AUTO_FUEL_POINTS[fuelScoredBucket]
+        : estimateFuelCount(fuelScoredBucket);
 }
 
 export function getAutoClimbPoints(entry: ScoutingEntry): number {

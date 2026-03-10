@@ -44,9 +44,9 @@ export const autonomousDefinitions: Record<string, FieldDefinition> = {
         validation: 'Yes/No',
     },
     fuelScoredBucket: {
-        label: 'Auto: Fuel Scored Bucket',
+        label: 'Auto: Fuel Scored',
         description: 'Estimated count of FUEL that this robot scores during AUTO; "scored" means the FUEL passes through the HUB opening and through the sensor array.',
-        validation: '0 / 1–3 / 4–8 / 9+',
+        validation: 'Number or range, for example 4 or 4-6 (legacy 9+ also supported)',
     },
     climbResult: {
         label: 'Auto: Climb Result',
@@ -97,7 +97,7 @@ export const teleopDefinitions: Record<string, FieldDefinition> = {
     typicalFuelCarried: {
         label: 'Teleop: Typical FUEL Carried per Scoring Cycle',
         description: 'Typical amount carried on an active scoring cycle (use the preload fullness reference to calibrate).',
-        validation: '1–4 / 5–8 / 9–12 / 13–16 / 17+',
+        validation: 'Number or range, for example 6 or 6-8 (legacy 17+ also supported)',
     },
     primaryFuelSource: {
         label: 'Teleop: Primary Fuel Source',

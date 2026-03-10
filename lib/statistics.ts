@@ -1,4 +1,5 @@
-import type { AllianceColor, ClimbLevel, FuelScoredBucket, MatchType, ScoutingEntry } from './types';
+import { estimateFuelCount } from './fuel';
+import type { AllianceColor, ClimbLevel, MatchType, ScoutingEntry } from './types';
 
 export interface TeamStats {
     teamNumber: number;
@@ -62,13 +63,8 @@ export interface AggregateStats {
     avgClimbLevel: number;
 }
 
-function fuelBucketToAvg(bucket: FuelScoredBucket): number {
-    switch (bucket) {
-        case '0': return 0;
-        case '1-3': return 2;
-        case '4-8': return 6;
-        case '9+': return 11;
-    }
+function fuelBucketToAvg(bucket: ScoutingEntry['autonomous']['fuelScoredBucket']): number {
+    return estimateFuelCount(bucket);
 }
 
 function climbLevelToNumber(level: ClimbLevel): number {

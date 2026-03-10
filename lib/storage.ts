@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { errorWithError } from './error-utils';
+import { sanitizeFuelCountLabel } from './fuel';
 import type { PitScoutingEntry, ScoutingEntry, ScoutingEntrySyncStatus } from './types';
 
 const SCOUTING_ENTRIES_KEY = '@agath_scouting_entries';
@@ -43,6 +44,14 @@ function normalizeScoutingEntry(entry: ScoutingEntry): ScoutingEntry {
 
     return {
         ...entry,
+        autonomous: {
+            ...entry.autonomous,
+            fuelScoredBucket: sanitizeFuelCountLabel(entry.autonomous.fuelScoredBucket) ?? '0',
+        },
+        teleop: {
+            ...entry.teleop,
+            typicalFuelCarried: sanitizeFuelCountLabel(entry.teleop.typicalFuelCarried),
+        },
         syncStatus,
         syncedAt,
     };

@@ -1,23 +1,18 @@
 import * as React from 'react';
 
 import { FormField, FormSection, FormToggleField } from '@/components/ui/FormField';
+import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Stepper } from '@/components/ui/Stepper';
 import { autonomousDefinitions } from '@/lib/definitions';
-import type { AutoClimbResult, AutonomousData, FuelScoredBucket } from '@/lib/types';
+import { isFuelCountLabel, sanitizeFuelCountLabel } from '@/lib/fuel';
+import type { AutoClimbResult, AutonomousData } from '@/lib/types';
 
 interface AutonomousSectionProps {
     data: AutonomousData;
     onChange: (data: AutonomousData) => void;
     showPitManagedFields?: boolean;
 }
-
-const fuelScoredOptions = [
-    { label: '0', value: '0' as FuelScoredBucket },
-    { label: '1-3', value: '1-3' as FuelScoredBucket },
-    { label: '4-8', value: '4-8' as FuelScoredBucket },
-    { label: '9+', value: '9+' as FuelScoredBucket },
-];
 
 const climbResultOptions = [
     { label: 'None', value: 'None' as AutoClimbResult },
@@ -30,6 +25,42 @@ export const AutonomousSection: React.FC<AutonomousSectionProps> = ({
     onChange,
     showPitManagedFields = true,
 }) => {
+    const [fuelScoredInput, setFuelScoredInput] = React.useState(data.fuelScoredBucket);
+
+    React.useEffect(() => {
+        setFuelScoredInput(data.fuelScoredBucket);
+    }, [data.fuelScoredBucket]);
+
+    const normalizedFuelScoredInput = sanitizeFuelCountLabel(fuelScoredInput);
+    const fuelScoredError = normalizedFuelScoredInput !== null && !isFuelCountLabel(normalizedFuelScoredInput)
+        ? 'Use a number like 4 or a range like 4-6.'
+        : undefined;
+
+    function commitFuelScoredInput(): void {
+        const normalizedValue = sanitizeFuelCountLabel(fuelScoredInput);
+
+        if (normalizedValue === null) {
+            setFuelScoredInput('0');
+
+            if (data.fuelScoredBucket !== '0') {
+                onChange({ ...data, fuelScoredBucket: '0' });
+            }
+
+            return;
+        }
+
+        if (!isFuelCountLabel(normalizedValue)) {
+            setFuelScoredInput(data.fuelScoredBucket);
+            return;
+        }
+
+        setFuelScoredInput(normalizedValue);
+
+        if (normalizedValue !== data.fuelScoredBucket) {
+            onChange({ ...data, fuelScoredBucket: normalizedValue });
+        }
+    }
+
     return (
         <FormSection
             title="Autonomous (20s)"
@@ -64,13 +95,18 @@ export const AutonomousSection: React.FC<AutonomousSectionProps> = ({
             />
 
             <FormField
-                label="Fuel Scored Bucket"
+                label="Fuel Scored"
                 definition={autonomousDefinitions.fuelScoredBucket}
             >
-                <Select
-                    value={data.fuelScoredBucket}
-                    onValueChange={(value) => onChange({ ...data, fuelScoredBucket: value })}
-                    options={fuelScoredOptions}
+                <Input
+                    value={fuelScoredInput}
+                    onChangeText={setFuelScoredInput}
+                    onBlur={commitFuelScoredInput}
+                    placeholder="e.g. 4 or 4-6"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    error={fuelScoredError}
+                    supportingText={fuelScoredError ? undefined : 'Use a single number or a range.'}
                 />
             </FormField>
 

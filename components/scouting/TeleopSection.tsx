@@ -2,25 +2,19 @@ import * as React from 'react';
 import { View } from 'react-native';
 
 import { FormField, FormSection, FormToggleField } from '@/components/ui/FormField';
+import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Stepper } from '@/components/ui/Stepper';
 import { teleopDefinitions } from '@/lib/definitions';
+import { isFuelCountLabel, sanitizeFuelCountLabel } from '@/lib/fuel';
+import type { PrimaryFuelSource, TeleopData } from '@/lib/types';
 import { useUIScale } from '@/lib/ui-scale';
-import type { FuelRange, PrimaryFuelSource, TeleopData } from '@/lib/types';
 
 interface TeleopSectionProps {
     data: TeleopData;
     onChange: (data: TeleopData) => void;
     showPitManagedFields?: boolean;
 }
-
-const fuelRangeOptions = [
-    { label: '1-4', value: '1-4' as FuelRange },
-    { label: '5-8', value: '5-8' as FuelRange },
-    { label: '9-12', value: '9-12' as FuelRange },
-    { label: '13-16', value: '13-16' as FuelRange },
-    { label: '17+', value: '17+' as FuelRange },
-];
 
 const fuelSourceOptions = [
     { label: 'Neutral Zone', value: 'Neutral Zone' as PrimaryFuelSource },
@@ -36,6 +30,42 @@ export const TeleopSection: React.FC<TeleopSectionProps> = ({
 }) => {
     const { scaleOption } = useUIScale();
     const stackFields = scaleOption === 'large' || scaleOption === 'extra-large';
+    const [typicalFuelCarriedInput, setTypicalFuelCarriedInput] = React.useState(data.typicalFuelCarried ?? '');
+
+    React.useEffect(() => {
+        setTypicalFuelCarriedInput(data.typicalFuelCarried ?? '');
+    }, [data.typicalFuelCarried]);
+
+    const normalizedTypicalFuelCarriedInput = sanitizeFuelCountLabel(typicalFuelCarriedInput);
+    const typicalFuelCarriedError =
+        normalizedTypicalFuelCarriedInput !== null && !isFuelCountLabel(normalizedTypicalFuelCarriedInput)
+            ? 'Use a number like 6 or a range like 6-8.'
+            : undefined;
+
+    function commitTypicalFuelCarriedInput(): void {
+        const normalizedValue = sanitizeFuelCountLabel(typicalFuelCarriedInput);
+
+        if (normalizedValue === null) {
+            setTypicalFuelCarriedInput('');
+
+            if (data.typicalFuelCarried !== null) {
+                onChange({ ...data, typicalFuelCarried: null });
+            }
+
+            return;
+        }
+
+        if (!isFuelCountLabel(normalizedValue)) {
+            setTypicalFuelCarriedInput(data.typicalFuelCarried ?? '');
+            return;
+        }
+
+        setTypicalFuelCarriedInput(normalizedValue);
+
+        if (normalizedValue !== data.typicalFuelCarried) {
+            onChange({ ...data, typicalFuelCarried: normalizedValue });
+        }
+    }
 
     return (
         <FormSection
@@ -89,10 +119,15 @@ export const TeleopSection: React.FC<TeleopSectionProps> = ({
                         label="Typical FUEL Carried"
                         definition={teleopDefinitions.typicalFuelCarried}
                     >
-                        <Select
-                            value={data.typicalFuelCarried ?? '1-4'}
-                            onValueChange={(value) => onChange({ ...data, typicalFuelCarried: value })}
-                            options={fuelRangeOptions}
+                        <Input
+                            value={typicalFuelCarriedInput}
+                            onChangeText={setTypicalFuelCarriedInput}
+                            onBlur={commitTypicalFuelCarriedInput}
+                            placeholder="e.g. 6 or 6-8"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            error={typicalFuelCarriedError}
+                            supportingText={typicalFuelCarriedError ? undefined : 'Use a single number or a range.'}
                         />
                     </FormField>
 

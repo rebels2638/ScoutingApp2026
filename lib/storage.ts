@@ -7,17 +7,10 @@ const SCOUTING_ENTRIES_KEY = '@agath_scouting_entries';
 const PIT_SCOUTING_ENTRIES_KEY = '@agath_pit_scouting_entries';
 
 type UnknownRecord = Record<string, unknown>;
-type ManagedDataSyncHandler = () => Promise<unknown>;
-
-let managedDataSyncHandler: ManagedDataSyncHandler | null = null;
 
 export interface LocalDataSnapshot {
     scoutingEntries: ScoutingEntry[];
     pitScoutingEntries: PitScoutingEntry[];
-}
-
-export function setManagedDataSyncHandler(handler: ManagedDataSyncHandler | null): void {
-    managedDataSyncHandler = handler;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -170,41 +163,20 @@ export function sanitizePitScoutingEntries(value: unknown): PitScoutingEntry[] {
     return value.filter(isPitScoutingEntry);
 }
 
-async function syncManagedDataFilesQuietly(): Promise<void> {
-    if (!managedDataSyncHandler) {
-        return;
-    }
-
-    try {
-        await managedDataSyncHandler();
-    } catch (error) {
-        errorWithError('Error syncing managed data files', error);
-    }
-}
-
 async function persistScoutingEntries(
-    entries: ScoutingEntry[],
-    options: { syncFiles?: boolean } = {}
+    entries: ScoutingEntry[]
 ): Promise<void> {
     await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(entries.map(normalizeScoutingEntry)));
-    if (options.syncFiles !== false) {
-        await syncManagedDataFilesQuietly();
-    }
 }
 
 async function persistPitScoutingEntries(
-    entries: PitScoutingEntry[],
-    options: { syncFiles?: boolean } = {}
+    entries: PitScoutingEntry[]
 ): Promise<void> {
     await AsyncStorage.setItem(PIT_SCOUTING_ENTRIES_KEY, JSON.stringify(entries));
-    if (options.syncFiles !== false) {
-        await syncManagedDataFilesQuietly();
-    }
 }
 
 async function persistLocalDataSnapshot(
-    snapshot: LocalDataSnapshot,
-    options: { syncFiles?: boolean } = {}
+    snapshot: LocalDataSnapshot
 ): Promise<void> {
     const normalizedSnapshot: LocalDataSnapshot = {
         scoutingEntries: snapshot.scoutingEntries.map(normalizeScoutingEntry),
@@ -215,10 +187,6 @@ async function persistLocalDataSnapshot(
         [SCOUTING_ENTRIES_KEY, JSON.stringify(normalizedSnapshot.scoutingEntries)],
         [PIT_SCOUTING_ENTRIES_KEY, JSON.stringify(normalizedSnapshot.pitScoutingEntries)],
     ]);
-
-    if (options.syncFiles !== false) {
-        await syncManagedDataFilesQuietly();
-    }
 }
 
 function mergeScoutingEntries(
@@ -384,7 +352,6 @@ export async function setScoutingEntrySyncStatus(
 export async function clearAllScoutingEntries(): Promise<void> {
     try {
         await AsyncStorage.removeItem(SCOUTING_ENTRIES_KEY);
-        await syncManagedDataFilesQuietly();
     } catch (error) {
         errorWithError('Error clearing scouting entries', error);
         throw error;

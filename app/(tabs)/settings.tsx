@@ -5,14 +5,12 @@ import { Text } from '@/components/ui/Text';
 import { getActivationKeyValidationError, useBackendAuth } from '@/lib/backend/auth';
 import { beginBackendSyncAttempt, requestBackendSyncNow } from '@/lib/backend/sync';
 import {
-    chooseAndroidManagedDataDirectory,
+    exportManagedDataBundle,
     getManagedDataStatus,
-    importManagedDataBundle,
     importPickedDataBundle,
-    syncManagedDataBundle,
+    type ManagedDataExportResult,
     type ManagedDataImportMode,
     type ManagedDataImportResult,
-    type ManagedDataSource,
     type ManagedDataStatus,
 } from '@/lib/dataFiles';
 import { SHOW_TEST_DATA_BUTTON } from '@/lib/devFlags';
@@ -326,24 +324,8 @@ function formatFileDataSummary(count: number, singular: string, plural: string):
     return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function getManagedDataSourceLabel(source: ManagedDataSource | null | undefined): string {
-    if (source === 'android-shared-folder') {
-        return 'the selected Android Files folder';
-    }
-
-    if (source === 'documents') {
-        return Platform.OS === 'ios'
-            ? 'the Files app document folder'
-            : 'the app document folder';
-    }
-
-    return 'the managed data file';
-}
-
 function formatImportResultMessage(result: ManagedDataImportResult): string {
-    const sourceLabel = result.source === 'picked-file'
-        ? 'the selected file'
-        : getManagedDataSourceLabel(result.source);
+    const sourceLabel = result.fileName ? result.fileName : 'the selected file';
     const importedSummary = `${formatFileDataSummary(result.importedScoutingEntryCount, 'scouting entry', 'scouting entries')} and ${formatFileDataSummary(result.importedPitScoutingEntryCount, 'pit entry', 'pit entries')}`;
     const resultingSummary = `${formatFileDataSummary(result.resultingScoutingEntryCount, 'scouting entry', 'scouting entries')} and ${formatFileDataSummary(result.resultingPitScoutingEntryCount, 'pit entry', 'pit entries')}`;
 
@@ -351,16 +333,29 @@ function formatImportResultMessage(result: ManagedDataImportResult): string {
         return `Replaced local data with ${importedSummary} from ${sourceLabel}. Local totals now match ${resultingSummary}.`;
     }
 
-    return `Imported ${importedSummary} from ${sourceLabel}. Local totals are now ${resultingSummary}.`;
+    return `Merged ${importedSummary} from ${sourceLabel}. Local totals are now ${resultingSummary}.`;
+}
+
+function formatExportResultMessage(result: ManagedDataExportResult): string {
+    const exportedSummary = formatFileDataSummary(result.exportedScoutingEntryCount, 'scouting entry', 'scouting entries');
+
+    if (result.destination === 'android-folder') {
+        return `Saved ${result.fileName} with ${exportedSummary} to the folder you selected.`;
+    }
+
+    if (result.destination === 'share-sheet') {
+        return `Opened the export sheet for ${result.fileName}. Choose Save to Files there if you want ${exportedSummary} in the Files app.`;
+    }
+
+    return `Downloaded ${result.fileName} with ${exportedSummary}.`;
 }
 
 function DataFilesCard() {
     const { theme } = useTheme();
     const [status, setStatus] = useState<ManagedDataStatus | null>(null);
     const [isLoadingStatus, setIsLoadingStatus] = useState(true);
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
-    const [isChoosingAndroidFolder, setIsChoosingAndroidFolder] = useState(false);
     const [resultMessage, setResultMessage] = useState<string | null>(null);
 
     const refreshStatus = useCallback(async () => {
@@ -368,7 +363,7 @@ function DataFilesCard() {
             const nextStatus = await getManagedDataStatus();
             setStatus(nextStatus);
         } catch (error) {
-            Alert.alert('Data files unavailable', getPublicErrorMessage(error, 'Unable to load data file status.'));
+            Alert.alert('Data transfer unavailable', getPublicErrorMessage(error, 'Unable to load local data totals for import/export.'));
         } finally {
             setIsLoadingStatus(false);
         }
@@ -376,23 +371,6 @@ function DataFilesCard() {
 
     useEffect(() => {
         void refreshStatus();
-    }, [refreshStatus]);
-
-    const runManagedImport = useCallback(async (
-        mode: ManagedDataImportMode,
-        source?: ManagedDataSource | null
-    ) => {
-        setIsImporting(true);
-        setResultMessage(null);
-        try {
-            const result = await importManagedDataBundle(mode, source);
-            setResultMessage(formatImportResultMessage(result));
-        } catch (error) {
-            Alert.alert('Import failed', getPublicErrorMessage(error, 'Unable to import the managed data file.'));
-        } finally {
-            setIsImporting(false);
-            await refreshStatus();
-        }
     }, [refreshStatus]);
 
     const runPickedImport = useCallback(async (mode: ManagedDataImportMode) => {
@@ -413,23 +391,40 @@ function DataFilesCard() {
         }
     }, [refreshStatus]);
 
+    const runExport = useCallback(async () => {
+        setIsExporting(true);
+        setResultMessage(null);
+        try {
+            const result = await exportManagedDataBundle();
+            if (!result) {
+                return;
+            }
+
+            setResultMessage(formatExportResultMessage(result));
+        } catch (error) {
+            Alert.alert('Export failed', getPublicErrorMessage(error, 'Unable to export the current data file.'));
+        } finally {
+            setIsExporting(false);
+            await refreshStatus();
+        }
+    }, [refreshStatus]);
+
     const promptImportMode = useCallback((
-        runImport: (mode: ManagedDataImportMode) => void,
-        sourceDescription: string
+        runImport: (mode: ManagedDataImportMode) => void
     ) => {
         Alert.alert(
             'Import data',
-            `${sourceDescription} Choose whether to merge records into the current local data or replace everything with the file contents.`,
+            'Choose how to load the selected JSON file. Full replacement is recommended. Merge attempts to combine records and can overwrite matching scouting IDs or pit team entries.',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Add / Update',
+                    text: 'Merge (Not Recommended)',
                     onPress: () => {
                         runImport('merge');
                     },
                 },
                 {
-                    text: 'Replace All',
+                    text: 'Full Replacement',
                     style: 'destructive',
                     onPress: () => {
                         runImport('replace');
@@ -439,155 +434,24 @@ function DataFilesCard() {
         );
     }, []);
 
-    const promptSyncConflict = (source: ManagedDataSource | null | undefined) => {
-        Alert.alert(
-            'File changes detected',
-            `Agath found a newer data file in ${getManagedDataSourceLabel(source)}. Import it first to keep those edits, or overwrite it with the app's current local data.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Import',
-                    onPress: () => {
-                        promptImportMode(
-                            (mode) => {
-                                void runManagedImport(mode, source ?? status?.availableImportSource ?? null);
-                            },
-                            `Import the file from ${getManagedDataSourceLabel(source)}.`
-                        );
-                    },
-                },
-                {
-                    text: 'Overwrite',
-                    style: 'destructive',
-                    onPress: () => {
-                        void runSync(true);
-                    },
-                },
-            ]
-        );
-    };
-
-    const runSync = useCallback(async (force: boolean = false) => {
-        setIsSyncing(true);
-        setResultMessage(null);
-        try {
-            const result = await syncManagedDataBundle({ force });
-
-            if (!result.ok) {
-                if (result.reason === 'pending_external_changes') {
-                    promptSyncConflict(result.source);
-                    return;
-                }
-
-                Alert.alert('Data files unavailable', 'Managed data files are unavailable on this platform.');
-                return;
-            }
-
-            const summaries = [
-                `Synced ${formatFileDataSummary(result.localScoutingEntryCount ?? 0, 'scouting entry', 'scouting entries')} and ${formatFileDataSummary(result.localPitScoutingEntryCount ?? 0, 'pit entry', 'pit entries')} to agath-data.json.`,
-                Platform.OS === 'android' && !status?.androidDirectoryConfigured
-                    ? 'Choose an Android folder below to make the file visible in Files outside the app.'
-                    : null,
-            ]
-                .filter((line): line is string => line !== null)
-                .join(' ');
-
-            setResultMessage(summaries);
-        } catch (error) {
-            Alert.alert('Sync failed', getPublicErrorMessage(error, 'Unable to sync the managed data files.'));
-        } finally {
-            setIsSyncing(false);
-            await refreshStatus();
-        }
-    }, [promptSyncConflict, refreshStatus, status?.androidDirectoryConfigured]);
-
     const handleImportPress = useCallback(() => {
-        const managedImportSource = status?.availableImportSource ?? null;
+        promptImportMode((mode) => {
+            void runPickedImport(mode);
+        });
+    }, [promptImportMode, runPickedImport]);
 
-        if (!managedImportSource) {
-            promptImportMode(
-                (mode) => {
-                    void runPickedImport(mode);
-                },
-                'Pick an Agath data JSON file from Files.'
-            );
-            return;
-        }
-
-        Alert.alert(
-            'Import data',
-            'Choose whether to import the file Agath manages for you or pick another data file from Files.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Managed File',
-                    onPress: () => {
-                        promptImportMode(
-                            (mode) => {
-                                void runManagedImport(mode, managedImportSource);
-                            },
-                            `Import the file from ${getManagedDataSourceLabel(managedImportSource)}.`
-                        );
-                    },
-                },
-                {
-                    text: 'Pick File',
-                    onPress: () => {
-                        promptImportMode(
-                            (mode) => {
-                                void runPickedImport(mode);
-                            },
-                            'Pick an Agath data JSON file from Files.'
-                        );
-                    },
-                },
-            ]
-        );
-    }, [promptImportMode, runManagedImport, runPickedImport, status?.availableImportSource]);
-
-    const handleChooseAndroidFolder = useCallback(async () => {
-        if (Platform.OS !== 'android') {
-            return;
-        }
-
-        setIsChoosingAndroidFolder(true);
-        setResultMessage(null);
-        try {
-            const selection = await chooseAndroidManagedDataDirectory();
-            if (selection.canceled) {
-                return;
-            }
-
-            const syncResult = await syncManagedDataBundle();
-            if (!syncResult.ok && syncResult.reason === 'pending_external_changes') {
-                promptSyncConflict(syncResult.source);
-                return;
-            }
-
-            setResultMessage('Android Files folder selected. Agath will keep agath-data.json mirrored there whenever local data changes.');
-        } catch (error) {
-            Alert.alert('Folder selection failed', getPublicErrorMessage(error, 'Unable to configure the Android Files folder.'));
-        } finally {
-            setIsChoosingAndroidFolder(false);
-            await refreshStatus();
-        }
-    }, [promptSyncConflict, refreshStatus]);
-
-    const isBusy = isLoadingStatus || isSyncing || isImporting || isChoosingAndroidFolder;
+    const isBusy = isLoadingStatus || isExporting || isImporting;
     const scoutingSummary = status
         ? formatFileDataSummary(status.localScoutingEntryCount, 'scouting entry', 'scouting entries')
         : '0 scouting entries';
     const pitSummary = status
         ? formatFileDataSummary(status.localPitScoutingEntryCount, 'pit entry', 'pit entries')
         : '0 pit entries';
-    const visibilityMessage = Platform.OS === 'ios'
-        ? 'On iPhone and iPad, agath-data.json appears in Files under On My iPhone > Agath.'
-        : status?.androidDirectoryConfigured
-            ? 'Android is mirroring agath-data.json into the Files folder you selected.'
-            : 'Choose an Android folder once so agath-data.json is visible in Files outside the app.';
-    const pendingChangeMessage = status?.pendingExternalChangeSource
-        ? `A newer file version was detected in ${getManagedDataSourceLabel(status.pendingExternalChangeSource)}. Import it before syncing again, or force an overwrite.`
-        : 'Agath keeps agath-data.json current after local data changes and app launches.';
+    const exportFlowMessage = Platform.OS === 'android'
+        ? 'Export writes a JSON file and opens the Android folder picker so you can choose where it is saved.'
+        : Platform.OS === 'ios'
+            ? 'Export writes a JSON file and opens the iOS share sheet. Choose Save to Files there if you want the bundle in the Files app.'
+            : 'Export downloads a JSON file containing only scouting entries in the browser.';
 
     return (
         <Card>
@@ -595,54 +459,42 @@ function DataFilesCard() {
                 <CardTitle>
                     <View className="flex-row items-center gap-2">
                         <FolderOpen size={18} color={theme.colors.mutedForeground} />
-                        <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">Data Files</Text>
+                        <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">Data Transfer</Text>
                     </View>
                 </CardTitle>
                 <CardDescription>
                     {isLoadingStatus
-                        ? 'Checking managed data files...'
-                        : `Managing ${scoutingSummary} and ${pitSummary} through agath-data.json.`}
+                        ? 'Checking local data totals...'
+                        : `${scoutingSummary} ready for export. ${pitSummary} stored locally and excluded from exports.`}
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <View className="gap-3">
                     <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
-                        {visibilityMessage}
+                        You may import a JSON file here, or export only your scouting entries as a JSON file.
                     </Text>
-                    <Text style={{ color: status?.pendingExternalChangeSource ? theme.colors.destructive : theme.colors.mutedForeground }} className="text-sm">
-                        {pendingChangeMessage}
+                    <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
+                        Full replacement is recommended. Merge can be buggy and is not guaranteed to work correctly, make a backup before using it.
                     </Text>
                     <Button
                         variant="secondary"
-                        disabled={isBusy}
+                        disabled={isBusy || status?.isSupported === false}
                         onPress={() => {
-                            void runSync();
+                            void runExport();
                         }}
                     >
-                        {isSyncing ? 'Syncing files...' : 'Sync Data Files'}
+                        {isExporting ? 'Exporting...' : 'Export Scouting Data'}
                     </Button>
                     <Button
                         variant="outline"
-                        disabled={isBusy}
+                        disabled={isBusy || status?.isSupported === false}
                         onPress={handleImportPress}
                     >
                         {isImporting ? 'Importing...' : 'Import Data'}
                     </Button>
-                    {Platform.OS === 'android' && (
-                        <Button
-                            variant="outline"
-                            disabled={isBusy}
-                            onPress={() => {
-                                void handleChooseAndroidFolder();
-                            }}
-                        >
-                            {isChoosingAndroidFolder
-                                ? 'Opening Files...'
-                                : status?.androidDirectoryConfigured
-                                    ? 'Change Android Folder'
-                                    : 'Choose Android Folder'}
-                        </Button>
-                    )}
+                    <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
+                        {exportFlowMessage}
+                    </Text>
                     {resultMessage && (
                         <Text style={{ color: theme.colors.primary }} className="text-sm font-medium">
                             {resultMessage}

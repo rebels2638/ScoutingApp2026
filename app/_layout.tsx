@@ -11,7 +11,6 @@ import '../global.css';
 
 import { BackendAuthProvider, useBackendAuth } from '@/lib/backend/auth';
 import { BACKEND_AUTO_SYNC_INTERVAL_MS, requestBackendSyncNow } from '@/lib/backend/sync';
-import { syncManagedDataBundle } from '@/lib/dataFiles';
 import { ThemeProvider, ThemedStatusBar, useTheme } from '@/lib/theme';
 import { UIScaleProvider } from '@/lib/ui-scale';
 
@@ -77,7 +76,6 @@ function RootLayoutNav() {
     return (
         <NavigationThemeProvider value={navigationTheme}>
             <BackendAutoSyncManager />
-            <LocalDataFileSyncManager />
             <ResponsiveOrientationManager />
             <ThemedStatusBar />
             <Stack>
@@ -163,47 +161,6 @@ function BackendAutoSyncManager() {
             appStateSubscription.remove();
         };
     }, [isAutoSyncEnabled, runAutoSync]);
-
-    return null;
-}
-
-function LocalDataFileSyncManager() {
-    const appStateRef = useRef(AppState.currentState);
-    const isSyncingRef = useRef(false);
-
-    const runDataFileSync = useCallback(async () => {
-        if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-            return;
-        }
-
-        if (isSyncingRef.current) {
-            return;
-        }
-
-        isSyncingRef.current = true;
-        try {
-            await syncManagedDataBundle();
-        } finally {
-            isSyncingRef.current = false;
-        }
-    }, []);
-
-    useEffect(() => {
-        void runDataFileSync();
-
-        const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
-            const previousAppState = appStateRef.current;
-            appStateRef.current = nextAppState;
-
-            if (nextAppState === 'active' && previousAppState !== 'active') {
-                void runDataFileSync();
-            }
-        });
-
-        return () => {
-            appStateSubscription.remove();
-        };
-    }, [runDataFileSync]);
 
     return null;
 }

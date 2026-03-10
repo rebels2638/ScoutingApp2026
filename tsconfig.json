@@ -17,6 +17,7 @@
     "nativewind-env.d.ts"
   ],
   "exclude": [
-    "adminapp"
+    "adminapp",
+    "node_modules"
   ]
 }

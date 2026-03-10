@@ -7,6 +7,7 @@ import {
     getAppwriteFunctions,
     setAppwriteSessionHeader,
 } from './client';
+import { getCooldownRemainingMs, ONE_MINUTE_COOLDOWN_MS } from './cooldown';
 import { getBackendConfigError, isBackendConfigured, requireBackendConfig } from './config';
 import { getOrCreateInstallUuid } from './device';
 import {
@@ -34,6 +35,7 @@ type ActivateKeyError =
 export interface ActivateKeyResult {
     ok: boolean;
     error?: ActivateKeyError;
+    retryAfterMs?: number;
 }
 
 interface RevalidateBackendSessionResult {
@@ -68,7 +70,7 @@ type UnknownRecord = Record<string, unknown>;
 const BackendAuthContext = React.createContext<BackendAuthContextValue | undefined>(undefined);
 const ACTIVATION_KEY_MAX_LENGTH = 512;
 const ACTIVATION_KEY_PATTERN = /^[!-~]+$/;
-const ACTIVATION_COOLDOWN_MS = 2000;
+const ACTIVATION_COOLDOWN_MS = ONE_MINUTE_COOLDOWN_MS;
 
 export function getActivationKeyValidationError(rawKey: string): string | null {
     const key = rawKey.trim();
@@ -349,8 +351,13 @@ export function BackendAuthProvider({ children }: BackendAuthProviderProps) {
         }
 
         const now = Date.now();
-        if (now - lastActivationAttemptAtRef.current < ACTIVATION_COOLDOWN_MS) {
-            return { ok: false, error: 'rate_limited' };
+        const retryAfterMs = getCooldownRemainingMs(
+            lastActivationAttemptAtRef.current,
+            ACTIVATION_COOLDOWN_MS,
+            now
+        );
+        if (retryAfterMs > 0) {
+            return { ok: false, error: 'rate_limited', retryAfterMs };
         }
 
         lastActivationAttemptAtRef.current = now;

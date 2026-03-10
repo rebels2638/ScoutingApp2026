@@ -2,7 +2,7 @@
   "expo": {
     "name": "Agath",
     "slug": "Agath",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "agath",
@@ -15,7 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "requireFullScreen": true
+      "requireFullScreen": true,
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,6 +36,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-document-picker",
       "expo-secure-store",
       [
         "expo-camera",

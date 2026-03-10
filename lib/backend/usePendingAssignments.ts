@@ -3,7 +3,9 @@ import * as React from 'react';
 import { warnWithError } from '../error-utils';
 import {
     fetchPendingAssignments,
+    type FetchPendingAssignmentsOptions,
     getCachedPendingAssignments,
+    isPendingAssignmentsRateLimitedError,
     subscribeToPendingAssignments,
     type PendingScoutingAssignment,
 } from './assignments';
@@ -17,7 +19,7 @@ interface UsePendingAssignmentsResult {
     assignments: PendingScoutingAssignment[];
     isLoading: boolean;
     error: string | null;
-    refreshAssignments: () => Promise<void>;
+    refreshAssignments: (options?: FetchPendingAssignmentsOptions) => Promise<void>;
 }
 
 export function usePendingAssignments({
@@ -28,7 +30,7 @@ export function usePendingAssignments({
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
 
-    const refreshAssignments = React.useCallback(async () => {
+    const refreshAssignments = React.useCallback(async (options: FetchPendingAssignmentsOptions = {}) => {
         if (!enabled || !userId) {
             setAssignments([]);
             setError(null);
@@ -38,10 +40,13 @@ export function usePendingAssignments({
 
         setIsLoading(true);
         try {
-            const nextAssignments = await fetchPendingAssignments(userId);
+            const nextAssignments = await fetchPendingAssignments(userId, options);
             setAssignments(nextAssignments);
             setError(null);
         } catch (loadError) {
+            if (isPendingAssignmentsRateLimitedError(loadError)) {
+                return;
+            }
             warnWithError('Failed to load pending assignments', loadError);
             setAssignments([]);
             setError('Unable to load pending assignments.');

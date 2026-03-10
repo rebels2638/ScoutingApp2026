@@ -205,7 +205,7 @@ export default function AssignmentsTab() {
                 });
                 setActiveAssignmentId(null);
                 resetForm();
-                await refreshAssignments();
+                await refreshAssignments({ bypassCooldown: true });
 
                 Alert.alert(
                     'Assignment submitted',

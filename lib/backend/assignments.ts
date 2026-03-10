@@ -3,13 +3,16 @@ import { Query, type Models } from 'react-native-appwrite';
 import type { AllianceColor, MatchType } from '../types';
 import { getAppwriteDatabases } from './client';
 import { requireBackendConfig } from './config';
+import { getCooldownRemainingMs, ONE_MINUTE_COOLDOWN_MS } from './cooldown';
 
 type AssignmentDocument = Models.DefaultDocument;
 type UnknownRecord = Record<string, unknown>;
 type PendingAssignmentsListener = (userId: string) => void;
 
+const ASSIGNMENT_REFRESH_COOLDOWN_MS = ONE_MINUTE_COOLDOWN_MS;
 const pendingAssignmentsByUserId = new Map<string, PendingScoutingAssignment[]>();
 const pendingAssignmentListeners = new Set<PendingAssignmentsListener>();
+const lastPendingAssignmentsFetchAtByUserId = new Map<string, number>();
 
 export interface PendingScoutingAssignment {
     id: string;
@@ -31,6 +34,39 @@ interface AssignmentMatchCandidate {
     matchNumber: number;
     teamNumber: number;
     matchType: MatchType;
+}
+
+export interface FetchPendingAssignmentsOptions {
+    bypassCooldown?: boolean;
+}
+
+interface PendingAssignmentsRateLimitedError extends Error {
+    code: 'rate_limited';
+    retryAfterMs: number;
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+    return typeof value === 'object' && value !== null;
+}
+
+function createPendingAssignmentsRateLimitedError(
+    retryAfterMs: number
+): PendingAssignmentsRateLimitedError {
+    const error = new Error('Pending assignments refresh is rate limited') as PendingAssignmentsRateLimitedError;
+    error.name = 'PendingAssignmentsRateLimitedError';
+    error.code = 'rate_limited';
+    error.retryAfterMs = retryAfterMs;
+    return error;
+}
+
+export function isPendingAssignmentsRateLimitedError(
+    error: unknown
+): error is PendingAssignmentsRateLimitedError {
+    return (
+        isRecord(error) &&
+        error.code === 'rate_limited' &&
+        typeof error.retryAfterMs === 'number'
+    );
 }
 
 function notifyPendingAssignmentsUpdated(userId: string): void {
@@ -156,13 +192,33 @@ export function findMatchingAssignment(
     return assignments.find((assignment) => matchesAssignment(assignment, candidate)) ?? null;
 }
 
-export async function fetchPendingAssignments(userId: string): Promise<PendingScoutingAssignment[]> {
+export async function fetchPendingAssignments(
+    userId: string,
+    options: FetchPendingAssignmentsOptions = {}
+): Promise<PendingScoutingAssignment[]> {
+    const normalizedUserId = userId.trim();
+    const now = Date.now();
+    const lastFetchAt =
+        lastPendingAssignmentsFetchAtByUserId.get(normalizedUserId) ?? -ASSIGNMENT_REFRESH_COOLDOWN_MS;
+    const retryAfterMs = options.bypassCooldown
+        ? 0
+        : getCooldownRemainingMs(lastFetchAt, ASSIGNMENT_REFRESH_COOLDOWN_MS, now);
+
+    if (retryAfterMs > 0) {
+        if (pendingAssignmentsByUserId.has(normalizedUserId)) {
+            return getCachedPendingAssignments(normalizedUserId);
+        }
+
+        throw createPendingAssignmentsRateLimitedError(retryAfterMs);
+    }
+
+    lastPendingAssignmentsFetchAtByUserId.set(normalizedUserId, now);
     const config = requireBackendConfig();
     const response = await getAppwriteDatabases().listDocuments<AssignmentDocument>({
         databaseId: config.databaseId,
         collectionId: config.collectionAssignmentsId,
         queries: [
-            Query.equal('key_id', userId),
+            Query.equal('key_id', normalizedUserId),
             Query.equal('completed', false),
             Query.orderAsc('$createdAt'),
             Query.limit(100),
@@ -170,7 +226,7 @@ export async function fetchPendingAssignments(userId: string): Promise<PendingSc
     });
 
     const assignments = response.documents.map(mapPendingAssignment);
-    setCachedPendingAssignments(userId, assignments);
+    setCachedPendingAssignments(normalizedUserId, assignments);
     return assignments;
 }
 
@@ -205,7 +261,7 @@ export async function completeAssignmentForSubmission({
     matchType,
     pendingAssignments,
 }: CompleteAssignmentForSubmissionParams): Promise<boolean> {
-    const assignments = pendingAssignments ?? (await fetchPendingAssignments(userId));
+    const assignments = pendingAssignments ?? (await fetchPendingAssignments(userId, { bypassCooldown: true }));
     let match = findMatchingAssignment(assignments, {
         matchNumber,
         teamNumber,
@@ -213,7 +269,7 @@ export async function completeAssignmentForSubmission({
     });
 
     if (!match && pendingAssignments) {
-        const refreshedAssignments = await fetchPendingAssignments(userId);
+        const refreshedAssignments = await fetchPendingAssignments(userId, { bypassCooldown: true });
         match = findMatchingAssignment(refreshedAssignments, {
             matchNumber,
             teamNumber,

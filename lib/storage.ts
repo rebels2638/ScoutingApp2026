@@ -1,5 +1,5 @@
-import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { errorWithError } from './error-utils';
 import type { PitScoutingEntry, ScoutingEntry, ScoutingEntrySyncStatus } from './types';
 
@@ -7,6 +7,18 @@ const SCOUTING_ENTRIES_KEY = '@agath_scouting_entries';
 const PIT_SCOUTING_ENTRIES_KEY = '@agath_pit_scouting_entries';
 
 type UnknownRecord = Record<string, unknown>;
+type ManagedDataSyncHandler = () => Promise<unknown>;
+
+let managedDataSyncHandler: ManagedDataSyncHandler | null = null;
+
+export interface LocalDataSnapshot {
+    scoutingEntries: ScoutingEntry[];
+    pitScoutingEntries: PitScoutingEntry[];
+}
+
+export function setManagedDataSyncHandler(handler: ManagedDataSyncHandler | null): void {
+    managedDataSyncHandler = handler;
+}
 
 function isRecord(value: unknown): value is UnknownRecord {
     return typeof value === 'object' && value !== null;
@@ -142,11 +154,139 @@ function parseStoredEntries<T>(
     }
 }
 
+export function sanitizeScoutingEntries(value: unknown): ScoutingEntry[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.filter(isScoutingEntry).map(normalizeScoutingEntry);
+}
+
+export function sanitizePitScoutingEntries(value: unknown): PitScoutingEntry[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.filter(isPitScoutingEntry);
+}
+
+async function syncManagedDataFilesQuietly(): Promise<void> {
+    if (!managedDataSyncHandler) {
+        return;
+    }
+
+    try {
+        await managedDataSyncHandler();
+    } catch (error) {
+        errorWithError('Error syncing managed data files', error);
+    }
+}
+
+async function persistScoutingEntries(
+    entries: ScoutingEntry[],
+    options: { syncFiles?: boolean } = {}
+): Promise<void> {
+    await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(entries.map(normalizeScoutingEntry)));
+    if (options.syncFiles !== false) {
+        await syncManagedDataFilesQuietly();
+    }
+}
+
+async function persistPitScoutingEntries(
+    entries: PitScoutingEntry[],
+    options: { syncFiles?: boolean } = {}
+): Promise<void> {
+    await AsyncStorage.setItem(PIT_SCOUTING_ENTRIES_KEY, JSON.stringify(entries));
+    if (options.syncFiles !== false) {
+        await syncManagedDataFilesQuietly();
+    }
+}
+
+async function persistLocalDataSnapshot(
+    snapshot: LocalDataSnapshot,
+    options: { syncFiles?: boolean } = {}
+): Promise<void> {
+    const normalizedSnapshot: LocalDataSnapshot = {
+        scoutingEntries: snapshot.scoutingEntries.map(normalizeScoutingEntry),
+        pitScoutingEntries: [...snapshot.pitScoutingEntries],
+    };
+
+    await AsyncStorage.multiSet([
+        [SCOUTING_ENTRIES_KEY, JSON.stringify(normalizedSnapshot.scoutingEntries)],
+        [PIT_SCOUTING_ENTRIES_KEY, JSON.stringify(normalizedSnapshot.pitScoutingEntries)],
+    ]);
+
+    if (options.syncFiles !== false) {
+        await syncManagedDataFilesQuietly();
+    }
+}
+
+function mergeScoutingEntries(
+    existingEntries: ScoutingEntry[],
+    incomingEntries: ScoutingEntry[]
+): ScoutingEntry[] {
+    const mergedEntries = new Map(existingEntries.map((entry) => [entry.id, normalizeScoutingEntry(entry)]));
+
+    for (const entry of incomingEntries.map(normalizeScoutingEntry)) {
+        mergedEntries.set(entry.id, entry);
+    }
+
+    return Array.from(mergedEntries.values());
+}
+
+function mergePitEntries(
+    existingEntries: PitScoutingEntry[],
+    incomingEntries: PitScoutingEntry[]
+): PitScoutingEntry[] {
+    const mergedEntries = new Map(existingEntries.map((entry) => [entry.teamNumber, entry]));
+
+    for (const entry of incomingEntries) {
+        mergedEntries.set(entry.teamNumber, entry);
+    }
+
+    return Array.from(mergedEntries.values());
+}
+
+export async function getLocalDataSnapshot(): Promise<LocalDataSnapshot> {
+    try {
+        const [scoutingEntries, pitScoutingEntries] = await Promise.all([
+            getScoutingEntries(),
+            getPitScoutingEntries(),
+        ]);
+
+        return {
+            scoutingEntries,
+            pitScoutingEntries,
+        };
+    } catch (error) {
+        errorWithError('Error getting local data snapshot', error);
+        return {
+            scoutingEntries: [],
+            pitScoutingEntries: [],
+        };
+    }
+}
+
+export async function replaceLocalDataSnapshot(snapshot: LocalDataSnapshot): Promise<void> {
+    await persistLocalDataSnapshot(snapshot);
+}
+
+export async function mergeLocalDataSnapshot(snapshot: LocalDataSnapshot): Promise<LocalDataSnapshot> {
+    const existingSnapshot = await getLocalDataSnapshot();
+    const mergedSnapshot: LocalDataSnapshot = {
+        scoutingEntries: mergeScoutingEntries(existingSnapshot.scoutingEntries, snapshot.scoutingEntries),
+        pitScoutingEntries: mergePitEntries(existingSnapshot.pitScoutingEntries, snapshot.pitScoutingEntries),
+    };
+
+    await persistLocalDataSnapshot(mergedSnapshot);
+    return mergedSnapshot;
+}
+
 export async function saveScoutingEntry(entry: ScoutingEntry): Promise<void> {
     try {
         const existingData = await getScoutingEntries();
         const updatedData = [...existingData, normalizeScoutingEntry(entry)];
-        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+        await persistScoutingEntries(updatedData);
     } catch (error) {
         errorWithError('Error saving scouting entry', error);
         throw error;
@@ -156,7 +296,7 @@ export async function saveScoutingEntry(entry: ScoutingEntry): Promise<void> {
 export async function getScoutingEntries(): Promise<ScoutingEntry[]> {
     try {
         const data = await AsyncStorage.getItem(SCOUTING_ENTRIES_KEY);
-        return parseStoredEntries(data, isScoutingEntry, 'scouting entries').map(normalizeScoutingEntry);
+        return sanitizeScoutingEntries(parseStoredEntries(data, isScoutingEntry, 'scouting entries'));
     } catch (error) {
         errorWithError('Error getting scouting entries', error);
         return [];
@@ -177,7 +317,7 @@ export async function deleteScoutingEntry(id: string): Promise<void> {
     try {
         const existingData = await getScoutingEntries();
         const updatedData = existingData.filter((entry) => entry.id !== id);
-        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+        await persistScoutingEntries(updatedData);
     } catch (error) {
         errorWithError('Error deleting scouting entry', error);
         throw error;
@@ -191,7 +331,7 @@ export async function updateScoutingEntry(updatedEntry: ScoutingEntry): Promise<
         const updatedData = existingData.map((entry) =>
             entry.id === normalizedEntry.id ? normalizedEntry : entry
         );
-        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+        await persistScoutingEntries(updatedData);
     } catch (error) {
         errorWithError('Error updating scouting entry', error);
         throw error;
@@ -209,7 +349,7 @@ export async function upsertScoutingEntry(entry: ScoutingEntry): Promise<'create
             )
             : [...existingData, normalizedEntry];
 
-        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+        await persistScoutingEntries(updatedData);
         return hasExistingEntry ? 'updated' : 'created';
     } catch (error) {
         errorWithError('Error upserting scouting entry', error);
@@ -234,7 +374,7 @@ export async function setScoutingEntrySyncStatus(
                 })
                 : entry
         );
-        await AsyncStorage.setItem(SCOUTING_ENTRIES_KEY, JSON.stringify(updatedData));
+        await persistScoutingEntries(updatedData);
     } catch (error) {
         errorWithError('Error updating scouting entry sync status', error);
         throw error;
@@ -244,6 +384,7 @@ export async function setScoutingEntrySyncStatus(
 export async function clearAllScoutingEntries(): Promise<void> {
     try {
         await AsyncStorage.removeItem(SCOUTING_ENTRIES_KEY);
+        await syncManagedDataFilesQuietly();
     } catch (error) {
         errorWithError('Error clearing scouting entries', error);
         throw error;
@@ -260,7 +401,7 @@ export async function savePitScoutingEntry(entry: PitScoutingEntry): Promise<voi
         } else {
             existingData.push(entry);
         }
-        await AsyncStorage.setItem(PIT_SCOUTING_ENTRIES_KEY, JSON.stringify(existingData));
+        await persistPitScoutingEntries(existingData);
     } catch (error) {
         errorWithError('Error saving pit scouting entry', error);
         throw error;
@@ -270,7 +411,7 @@ export async function savePitScoutingEntry(entry: PitScoutingEntry): Promise<voi
 export async function getPitScoutingEntries(): Promise<PitScoutingEntry[]> {
     try {
         const data = await AsyncStorage.getItem(PIT_SCOUTING_ENTRIES_KEY);
-        return parseStoredEntries(data, isPitScoutingEntry, 'pit scouting entries');
+        return sanitizePitScoutingEntries(parseStoredEntries(data, isPitScoutingEntry, 'pit scouting entries'));
     } catch (error) {
         errorWithError('Error getting pit scouting entries', error);
         return [];

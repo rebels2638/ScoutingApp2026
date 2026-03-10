@@ -36,7 +36,7 @@ export default function ConnectScreen() {
                         : result.error === 'invalid_format'
                             ? 'Enter a valid key'
                             : result.error === 'rate_limited'
-                                ? 'Wait a moment before trying again'
+                                ? 'Wait one minute before trying again'
                                 : 'Unable to activate key right now'
             );
             return;

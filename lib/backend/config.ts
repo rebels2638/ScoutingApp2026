@@ -12,6 +12,23 @@ type AppwritePublicEnvKey =
     | 'EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID'
     | 'EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID';
 
+const EXPO_PUBLIC_ENV: Record<AppwritePublicEnvKey, string | undefined> = {
+    EXPO_PUBLIC_APPWRITE_ENDPOINT: process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT,
+    EXPO_PUBLIC_APPWRITE_PROJECT_ID: process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID,
+    EXPO_PUBLIC_APPWRITE_PLATFORM_ID: process.env.EXPO_PUBLIC_APPWRITE_PLATFORM_ID,
+    EXPO_PUBLIC_APPWRITE_DATABASE_ID: process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID,
+    EXPO_PUBLIC_APPWRITE_COLLECTION_ASSIGNMENTS_ID:
+        process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ASSIGNMENTS_ID,
+    EXPO_PUBLIC_APPWRITE_COLLECTION_SCOUTING_DATA_ID:
+        process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_SCOUTING_DATA_ID,
+    EXPO_PUBLIC_APPWRITE_COLLECTION_PIT_SCOUTING_ID:
+        process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_PIT_SCOUTING_ID,
+    EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID:
+        process.env.EXPO_PUBLIC_APPWRITE_FUNCTION_VALIDATE_KEY_ID,
+    EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID:
+        process.env.EXPO_PUBLIC_APPWRITE_FUNCTION_SUBMIT_SCOUTING_ID,
+};
+
 export interface BackendConfig {
     endpoint: string;
     projectId: string;
@@ -29,7 +46,7 @@ let cachedBackendConfig: BackendConfig | null = null;
 let cachedBackendConfigError: Error | null = null;
 
 function getRequiredEnvValue(key: AppwritePublicEnvKey): string {
-    const value = process.env[key];
+    const value = EXPO_PUBLIC_ENV[key];
     if (typeof value !== 'string') {
         throw new Error(
             `Missing required environment variable ${key}. Copy .env.example to a local .env file and set it.`
@@ -58,7 +75,7 @@ function getRequiredIdentifier(key: AppwritePublicEnvKey): string {
 }
 
 function getOptionalIdentifier(key: AppwritePublicEnvKey): string | null {
-    const value = process.env[key];
+    const value = EXPO_PUBLIC_ENV[key];
     if (typeof value !== 'string') {
         return null;
     }

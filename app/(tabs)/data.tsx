@@ -399,7 +399,7 @@ export default function DataTab() {
             await loadEntries();
             clearSelection();
             if (uploadedCount > 0) {
-                await refreshAssignments();
+                await refreshAssignments({ bypassCooldown: true });
             }
 
             const messageParts: string[] = [];

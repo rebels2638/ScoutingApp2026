@@ -2,6 +2,19 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Text } from '@/components/ui/Text';
+import {
+    APP_DESCRIPTION,
+    APP_DEVELOPERS,
+    APP_ISSUES_URL,
+    APP_LICENSE_NAME,
+    APP_LICENSE_SUMMARY,
+    APP_LICENSE_URL,
+    APP_REPOSITORY_URL,
+    APP_TEAM_NAME,
+    APP_TEAM_PHOTO_SOURCE,
+    OPEN_SOURCE_PACKAGES,
+} from '@/lib/about';
+import { springConfigs, timingConfigs } from '@/lib/animations';
 import { getActivationKeyValidationError, useBackendAuth } from '@/lib/backend/auth';
 import { beginBackendSyncAttempt, requestBackendSyncNow } from '@/lib/backend/sync';
 import {
@@ -24,9 +37,11 @@ import {
     useUIScale,
     type UIScaleOption,
 } from '@/lib/ui-scale';
-import { Check, FlaskConical, FolderOpen, Moon, Smartphone, Sun } from 'lucide-react-native';
+import Constants from 'expo-constants';
+import { Check, FlaskConical, FolderOpen, Info, Moon, Smartphone, Sun, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarMetrics } from './_layout';
 
@@ -124,6 +139,339 @@ function getQueuedUploadSummary(attemptedCount: number, uploadedCount: number, r
     }
 
     return `Uploaded ${uploadedCount} of ${attemptedCount} queued entries; ${remainingCount} still waiting.`;
+}
+
+interface AboutSectionProps {
+    title: string;
+    description?: string;
+    action?: React.ReactNode;
+    children: React.ReactNode;
+}
+
+function AboutSection({ title, description, action, children }: AboutSectionProps) {
+    const colors = useThemeColors();
+
+    return (
+        <View
+            style={{
+                backgroundColor: colors.secondary,
+                borderColor: colors.border,
+                borderWidth: 1,
+            }}
+            className="rounded-xl p-4"
+        >
+            <View className="gap-3">
+                <View className="flex-row items-start justify-between gap-3">
+                    <View className="flex-1 gap-1">
+                        <Text className="text-base font-semibold">{title}</Text>
+                        {description ? (
+                            <Text style={{ color: colors.mutedForeground }} className="text-sm leading-5">
+                                {description}
+                            </Text>
+                        ) : null}
+                    </View>
+                    {action}
+                </View>
+                {children}
+            </View>
+        </View>
+    );
+}
+
+function AboutAppCard() {
+    const { theme } = useTheme();
+    const { scaled } = useUIScale();
+    const [open, setOpen] = useState(false);
+    const [showOpenSource, setShowOpenSource] = useState(false);
+    const modalScale = useSharedValue(0.96);
+    const modalOpacity = useSharedValue(0);
+    const appName = Constants.expoConfig?.name ?? 'Agath';
+    const appVersion = Constants.expoConfig?.version ?? '0.6.0';
+
+    useEffect(() => {
+        if (open) {
+            modalScale.value = withSpring(1, springConfigs.gentle);
+            modalOpacity.value = withTiming(1, timingConfigs.fast);
+            return;
+        }
+
+        modalScale.value = 0.96;
+        modalOpacity.value = 0;
+    }, [modalOpacity, modalScale, open]);
+
+    const modalAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: modalOpacity.value,
+        transform: [{ scale: modalScale.value }],
+    }));
+
+    const openLink = async (label: string, url: string) => {
+        try {
+            const canOpen = await Linking.canOpenURL(url);
+            if (!canOpen) {
+                throw new Error('Unable to open URL');
+            }
+
+            await Linking.openURL(url);
+        } catch (error) {
+            Alert.alert('Unable to open link', `Unable to open ${label} right now.`);
+        }
+    };
+
+    return (
+        <>
+            <Card>
+                <CardHeader className="flex-col items-start gap-1">
+                    <CardTitle>
+                        <View className="flex-row items-center gap-2">
+                            <Info size={18} color={theme.colors.mutedForeground} />
+                            <Text style={{ color: theme.colors.foreground }} className="text-base font-semibold">About Agath</Text>
+                        </View>
+                    </CardTitle>
+                    <CardDescription>
+                        Versioning Information, Developer Credits, Open-Source Notices, and more.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button variant="secondary" onPress={() => setOpen(true)}>
+                        Open Info Window
+                    </Button>
+                </CardContent>
+            </Card>
+
+            <Modal
+                visible={open}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setOpen(false)}
+            >
+                <View className="flex-1 items-center justify-center bg-black/60 px-4 py-6">
+                    <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setOpen(false)} />
+                    <Animated.View
+                        style={[
+                            {
+                                backgroundColor: theme.colors.card,
+                                borderColor: theme.colors.border,
+                                borderWidth: 1,
+                                width: '100%',
+                                maxWidth: 720,
+                                maxHeight: '94%',
+                            },
+                            modalAnimatedStyle,
+                        ]}
+                        className="overflow-hidden rounded-2xl"
+                    >
+                        <View
+                            style={{ borderBottomColor: theme.colors.border, borderBottomWidth: 1 }}
+                            className="flex-row items-center justify-between px-5 py-4"
+                        >
+                            <View className="flex-1 pr-4">
+                                <Text className="text-lg font-semibold">About {appName}</Text>
+                                <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
+                                    App details, credits, and open-source notices.
+                                </Text>
+                            </View>
+                            <Pressable
+                                onPress={() => setOpen(false)}
+                                className="items-center justify-center rounded-md"
+                                style={{ height: scaled(36), width: scaled(36) }}
+                                hitSlop={8}
+                            >
+                                <X size={scaled(18)} color={theme.colors.mutedForeground} />
+                            </Pressable>
+                        </View>
+
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ padding: 20 }}
+                        >
+                            <View className="gap-4">
+                                <View
+                                    style={{
+                                        backgroundColor: theme.colors.secondary,
+                                        borderColor: theme.colors.border,
+                                        borderWidth: 1,
+                                    }}
+                                    className="overflow-hidden rounded-xl"
+                                >
+                                    <Image
+                                        source={APP_TEAM_PHOTO_SOURCE}
+                                        resizeMode="cover"
+                                        style={{
+                                            backgroundColor: theme.colors.secondary,
+                                            height: scaled(180),
+                                            width: '100%',
+                                        }}
+                                    />
+
+                                    <View className="gap-3 p-4">
+                                        <View className="gap-1">
+                                            <Text className="text-lg font-semibold">{appName} v{appVersion}</Text>
+                                            <Text style={{ color: theme.colors.mutedForeground }} className="text-sm leading-5">
+                                                {APP_DESCRIPTION}
+                                            </Text>
+                                            <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
+                                                {APP_TEAM_NAME}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <AboutSection
+                                    title="Repository"
+                                    description="Source code, issue tracking, and project history live on GitHub."
+                                >
+                                    <View className="gap-3">
+                                        <Text style={{ color: theme.colors.mutedForeground }} className="text-sm leading-5">
+                                            {APP_REPOSITORY_URL}
+                                        </Text>
+                                        <View className="flex-row flex-wrap gap-2">
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onPress={() => {
+                                                    void openLink('the repository', APP_REPOSITORY_URL);
+                                                }}
+                                            >
+                                                Open Repository
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onPress={() => {
+                                                    void openLink('the issue tracker', APP_ISSUES_URL);
+                                                }}
+                                            >
+                                                Open Issues
+                                            </Button>
+                                        </View>
+                                    </View>
+                                </AboutSection>
+
+                                <AboutSection
+                                    title="Developers"
+                                    description="Current app contributors listed in this build."
+                                >
+                                    <View className="gap-3">
+                                        {APP_DEVELOPERS.map((developer) => (
+                                            <View
+                                                key={developer.name}
+                                                style={{
+                                                    backgroundColor: theme.colors.card,
+                                                    borderColor: theme.colors.border,
+                                                    borderWidth: 1,
+                                                }}
+                                                className="rounded-lg p-3"
+                                            >
+                                                <View className="flex-row items-center justify-between gap-3">
+                                                    <View className="flex-1 gap-1">
+                                                        <Text className="text-sm font-semibold">{developer.name}</Text>
+                                                        <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
+                                                            {developer.role}
+                                                        </Text>
+                                                    </View>
+                                                    {developer.url ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onPress={() => {
+                                                                void openLink(`${developer.name}'s profile`, developer.url as string);
+                                                            }}
+                                                        >
+                                                            GitHub
+                                                        </Button>
+                                                    ) : null}
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </AboutSection>
+
+                                <AboutSection
+                                    title="App License"
+                                    description="Agath is open source and may be forked or adapted for other teams under its published terms."
+                                >
+                                    <View className="gap-3">
+                                        <View
+                                            style={{
+                                                backgroundColor: theme.colors.card,
+                                                borderColor: theme.colors.border,
+                                                borderWidth: 1,
+                                            }}
+                                            className="rounded-lg p-3"
+                                        >
+                                            <Text className="text-sm font-semibold">{APP_LICENSE_NAME}</Text>
+                                            <Text style={{ color: theme.colors.mutedForeground }} className="mt-2 text-sm leading-5">
+                                                {APP_LICENSE_SUMMARY}
+                                            </Text>
+                                        </View>
+                                        <View className="flex-row flex-wrap gap-2">
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onPress={() => {
+                                                    void openLink('the GPL license page', APP_LICENSE_URL);
+                                                }}
+                                            >
+                                                Open License Text
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onPress={() => {
+                                                    void openLink('the repository', APP_REPOSITORY_URL);
+                                                }}
+                                            >
+                                                Open Source Code
+                                            </Button>
+                                        </View>
+                                    </View>
+                                </AboutSection>
+
+                                <AboutSection
+                                    title="Open-Source Packages"
+                                    description={`This build depends on ${OPEN_SOURCE_PACKAGES.length} open-source packages. Their license types are listed below.`}
+                                    action={(
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onPress={() => setShowOpenSource((current) => !current)}
+                                        >
+                                            {showOpenSource ? 'Hide' : 'Show'}
+                                        </Button>
+                                    )}
+                                >
+                                    {showOpenSource ? (
+                                        <View className="gap-2">
+                                            {OPEN_SOURCE_PACKAGES.map((pkg) => (
+                                                <View
+                                                    key={pkg.name}
+                                                    style={{
+                                                        backgroundColor: theme.colors.card,
+                                                        borderColor: theme.colors.border,
+                                                        borderWidth: 1,
+                                                    }}
+                                                    className="flex-row items-center justify-between gap-3 rounded-lg px-3 py-2.5"
+                                                >
+                                                    <Text className="flex-1 text-sm font-medium">{pkg.name}</Text>
+                                                    <Text style={{ color: theme.colors.mutedForeground }} className="text-sm">
+                                                        {pkg.license}
+                                                    </Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    ) : (
+                                        <Text style={{ color: theme.colors.mutedForeground }} className="text-sm leading-5">
+                                            Expand this section to see what open source packages were used in this build.
+                                        </Text>
+                                    )}
+                                </AboutSection>
+                            </View>
+                        </ScrollView>
+                    </Animated.View>
+                </View>
+            </Modal>
+        </>
+    );
 }
 
 function BackendConnectionCard() {
@@ -465,7 +813,7 @@ function DataFilesCard() {
                 <CardDescription>
                     {isLoadingStatus
                         ? 'Checking local data totals...'
-                        : `${scoutingSummary} ready for export. ${pitSummary} stored locally and excluded from exports.`}
+                        : `${scoutingSummary} ready for export.`}
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -612,6 +960,8 @@ export default function SettingsScreen() {
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             >
+                <AboutAppCard />
+
                 <Card>
                     <CardHeader>
                         <CardTitle>

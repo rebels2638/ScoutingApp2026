@@ -89,11 +89,6 @@ export const teleopDefinitions: Record<string, FieldDefinition> = {
         description: 'Count cycles where the robot shoots while its alliance HUB is inactive (0-point action).',
         validation: 'Min 0',
     },
-    fuelShotsAttempted: {
-        label: 'Teleop: Total FUEL Shots Attempted',
-        description: 'Estimated total number of FUEL pieces launched/dumped during teleop (active and inactive HUB states).',
-        validation: 'Min 0 (used for mechanical reliability)',
-    },
     typicalFuelCarried: {
         label: 'Teleop: Typical FUEL Carried per Scoring Cycle',
         description: 'Typical amount carried on an active scoring cycle (use the preload fullness reference to calibrate).',

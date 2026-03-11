@@ -114,14 +114,10 @@ export function getInactiveFuelEstimate(entry: ScoutingEntry, pitProfilesByTeam:
     return entry.teleop.wastedCyclesInactive * getEstimatedFuelPerCycle(typicalFuelCarried);
 }
 
-export function getEstimatedFuelShotsAttempted(entry: ScoutingEntry, pitProfilesByTeam: PitProfileMap): number {
-    const fallbackTeleopEstimate =
+export function getEstimatedFuelAttempts(entry: ScoutingEntry, pitProfilesByTeam: PitProfileMap): number {
+    const teleopAttemptEstimate =
         getTeleopFuelEstimate(entry, pitProfilesByTeam) + getInactiveFuelEstimate(entry, pitProfilesByTeam);
-    const recordedTeleopAttempts = entry.teleop.fuelShotsAttempted;
-    const teleopAttempts = recordedTeleopAttempts && recordedTeleopAttempts > 0
-        ? recordedTeleopAttempts
-        : fallbackTeleopEstimate;
-    return getAutoFuelPoints(entry) + Math.max(teleopAttempts, 0);
+    return getAutoFuelPoints(entry) + Math.max(teleopAttemptEstimate, 0);
 }
 
 export function getEndgamePoints(entry: ScoutingEntry): number {
@@ -191,13 +187,13 @@ export function buildTeamAnalytics(entries: ScoutingEntry[], pitProfilesByTeam: 
             const totalInactiveFuel = inactiveFuelValues.reduce((sum, value) => sum + value, 0);
             const totalFuelScoredAnyHub = totalAutoFuel + totalTeleopFuel + totalInactiveFuel;
             const totalFuelScoredActiveHub = totalAutoFuel + totalTeleopFuel;
-            const totalFuelShotsAttempted = teamEntries.reduce(
-                (sum, entry) => sum + getEstimatedFuelShotsAttempted(entry, pitProfilesByTeam),
+            const totalEstimatedFuelAttempts = teamEntries.reduce(
+                (sum, entry) => sum + getEstimatedFuelAttempts(entry, pitProfilesByTeam),
                 0
             );
-            const normalizedShotsAttempted = Math.max(totalFuelShotsAttempted, totalFuelScoredAnyHub);
-            const mechanicalReliabilityPct = normalizedShotsAttempted > 0
-                ? clamp((totalFuelScoredAnyHub / normalizedShotsAttempted) * 100, 0, 100)
+            const normalizedAttemptTotal = Math.max(totalEstimatedFuelAttempts, totalFuelScoredAnyHub);
+            const mechanicalReliabilityPct = normalizedAttemptTotal > 0
+                ? clamp((totalFuelScoredAnyHub / normalizedAttemptTotal) * 100, 0, 100)
                 : 0;
             const strategicReliabilityPct = totalFuelScoredAnyHub > 0
                 ? clamp((totalFuelScoredActiveHub / totalFuelScoredAnyHub) * 100, 0, 100)

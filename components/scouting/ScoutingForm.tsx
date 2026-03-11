@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View } from 'react-native';
+import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivePhaseSection } from '@/components/scouting/ActivePhaseSection';
@@ -48,115 +48,121 @@ export function ScoutingForm({
     const insets = useSafeAreaInsets();
 
     return (
-        <ThemedScrollView
-            contentContainerStyle={{
-                paddingHorizontal: 16,
-                paddingTop: insets.top + 16,
-                paddingBottom: bottomPadding,
-            }}
-            keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
         >
-            <View className="gap-4">
-                {headerContent}
+            <ThemedScrollView
+                automaticallyAdjustKeyboardInsets={false}
+                contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingTop: insets.top + 16,
+                    paddingBottom: bottomPadding,
+                }}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View className="gap-4">
+                    {headerContent}
 
-                {isPitDataPending ? (
-                    <Card variant="outline">
-                        <CardHeader className="flex-col items-start gap-1 pb-2">
-                            <CardTitle className="text-base">Pit Scouting Pending</CardTitle>
-                            <CardDescription>
-                                Team {formData.matchMetadata.teamNumber} pit scouting data is not ready yet.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Text className="text-sm">
-                                Agath will keep checking automatically. You can still save or submit this match entry
-                                now and let the backend combine pit data later.
-                            </Text>
-                        </CardContent>
-                    </Card>
-                ) : null}
+                    {isPitDataPending ? (
+                        <Card variant="outline">
+                            <CardHeader className="flex-col items-start gap-1 pb-2">
+                                <CardTitle className="text-base">Pit Scouting Pending</CardTitle>
+                                <CardDescription>
+                                    Team {formData.matchMetadata.teamNumber} pit scouting data is not ready yet.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Text className="text-sm">
+                                    Agath will keep checking automatically. You can still save or submit this match
+                                    entry now and let the backend combine pit data later.
+                                </Text>
+                            </CardContent>
+                        </Card>
+                    ) : null}
 
-                <MatchMetadataSection
-                    data={formData.matchMetadata}
-                    onChange={(nextMatchMetadata) =>
-                        onFormDataChange({
-                            ...formData,
-                            matchMetadata: nextMatchMetadata,
-                        })
-                    }
-                    disabled={lockMatchMetadata}
-                />
+                    <MatchMetadataSection
+                        data={formData.matchMetadata}
+                        onChange={(nextMatchMetadata) =>
+                            onFormDataChange({
+                                ...formData,
+                                matchMetadata: nextMatchMetadata,
+                            })
+                        }
+                        disabled={lockMatchMetadata}
+                    />
 
-                <AutonomousSection
-                    data={formData.autonomous}
-                    onChange={(nextAutonomousData) =>
-                        onFormDataChange({
-                            ...formData,
-                            autonomous: nextAutonomousData,
-                        })
-                    }
-                    showPitManagedFields={!isPitScoutingEnabled}
-                />
+                    <AutonomousSection
+                        data={formData.autonomous}
+                        onChange={(nextAutonomousData) =>
+                            onFormDataChange({
+                                ...formData,
+                                autonomous: nextAutonomousData,
+                            })
+                        }
+                        showPitManagedFields={!isPitScoutingEnabled}
+                    />
 
-                <TeleopSection
-                    data={formData.teleop}
-                    onChange={(nextTeleopData) =>
-                        onFormDataChange({
-                            ...formData,
-                            teleop: nextTeleopData,
-                        })
-                    }
-                    showPitManagedFields={!isPitScoutingEnabled}
-                />
+                    <TeleopSection
+                        data={formData.teleop}
+                        onChange={(nextTeleopData) =>
+                            onFormDataChange({
+                                ...formData,
+                                teleop: nextTeleopData,
+                            })
+                        }
+                        showPitManagedFields={!isPitScoutingEnabled}
+                    />
 
-                <ActivePhaseSection
-                    data={formData.activePhase}
-                    onChange={(nextActivePhaseData) =>
-                        onFormDataChange({
-                            ...formData,
-                            activePhase: nextActivePhaseData,
-                        })
-                    }
-                />
+                    <ActivePhaseSection
+                        data={formData.activePhase}
+                        onChange={(nextActivePhaseData) =>
+                            onFormDataChange({
+                                ...formData,
+                                activePhase: nextActivePhaseData,
+                            })
+                        }
+                    />
 
-                <InactivePhaseSection
-                    data={formData.inactivePhase}
-                    onChange={(nextInactivePhaseData) =>
-                        onFormDataChange({
-                            ...formData,
-                            inactivePhase: nextInactivePhaseData,
-                        })
-                    }
-                />
+                    <InactivePhaseSection
+                        data={formData.inactivePhase}
+                        onChange={(nextInactivePhaseData) =>
+                            onFormDataChange({
+                                ...formData,
+                                inactivePhase: nextInactivePhaseData,
+                            })
+                        }
+                    />
 
-                <EndgameSection
-                    data={formData.endgame}
-                    onChange={(nextEndgameData) =>
-                        onFormDataChange({
-                            ...formData,
-                            endgame: nextEndgameData,
-                        })
-                    }
-                />
-            </View>
+                    <EndgameSection
+                        data={formData.endgame}
+                        onChange={(nextEndgameData) =>
+                            onFormDataChange({
+                                ...formData,
+                                endgame: nextEndgameData,
+                            })
+                        }
+                    />
+                </View>
 
-            <View className="mt-8 gap-3">
-                <Button
-                    onPress={onSubmit}
-                    disabled={isSubmitting}
-                    size="lg"
-                >
-                    {isSubmitting ? submittingLabel : submitLabel}
-                </Button>
+                <View className="mt-8 gap-3">
+                    <Button
+                        onPress={onSubmit}
+                        disabled={isSubmitting}
+                        size="lg"
+                    >
+                        {isSubmitting ? submittingLabel : submitLabel}
+                    </Button>
 
-                <Button
-                    variant="outline"
-                    onPress={onReset}
-                    disabled={isSubmitting}
-                >
-                    {resetLabel}
-                </Button>
-            </View>
-        </ThemedScrollView>
+                    <Button
+                        variant="outline"
+                        onPress={onReset}
+                        disabled={isSubmitting}
+                    >
+                        {resetLabel}
+                    </Button>
+                </View>
+            </ThemedScrollView>
+        </KeyboardAvoidingView>
     );
 }

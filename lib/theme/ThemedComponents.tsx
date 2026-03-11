@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import * as React from 'react';
 import {
+    Platform,
     ScrollView,
     ScrollViewProps,
     StatusBar,
@@ -52,6 +53,8 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
             style,
             contentContainerStyle,
             contentClassName,
+            automaticallyAdjustKeyboardInsets,
+            keyboardDismissMode,
             ...props
         },
         ref
@@ -68,6 +71,12 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
                 className={cn('flex-1', className)}
                 style={[themedStyle, style]}
                 contentContainerStyle={contentContainerStyle}
+                automaticallyAdjustKeyboardInsets={
+                    automaticallyAdjustKeyboardInsets ?? Platform.OS === 'ios'
+                }
+                keyboardDismissMode={
+                    keyboardDismissMode ?? (Platform.OS === 'ios' ? 'interactive' : 'on-drag')
+                }
                 {...props}
             />
         );

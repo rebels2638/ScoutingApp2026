@@ -119,7 +119,6 @@ function buildRawDataSections(entry: ScoutingEntry): RawDataSection[] {
             values: {
                 scoringCyclesActive: entry.teleop.scoringCyclesActive,
                 wastedCyclesInactive: entry.teleop.wastedCyclesInactive,
-                fuelShotsAttempted: entry.teleop.fuelShotsAttempted,
                 typicalFuelCarried: entry.teleop.typicalFuelCarried,
                 primaryFuelSource: entry.teleop.primaryFuelSource,
                 usesTrenchRoutes: entry.teleop.usesTrenchRoutes,

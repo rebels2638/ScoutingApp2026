@@ -101,18 +101,6 @@ export const TeleopSection: React.FC<TeleopSectionProps> = ({
                 </View>
             </View>
 
-            <FormField
-                label="Total FUEL Shots Attempted"
-                definition={teleopDefinitions.fuelShotsAttempted}
-            >
-                <Stepper
-                    value={data.fuelShotsAttempted ?? 0}
-                    onValueChange={(value) => onChange({ ...data, fuelShotsAttempted: value })}
-                    min={0}
-                    max={200}
-                />
-            </FormField>
-
             {showPitManagedFields ? (
                 <>
                     <FormField

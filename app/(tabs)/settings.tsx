@@ -602,6 +602,7 @@ export default function SettingsScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
             <ThemedScrollView
+                automaticallyAdjustKeyboardInsets={false}
                 contentContainerStyle={{
                     paddingTop: insets.top + 16,
                     paddingBottom: bottomPadding,

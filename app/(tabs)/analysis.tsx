@@ -71,7 +71,7 @@ const ANALYSIS_TERM_HELP: Array<{ term: string; definition: FieldDefinition }> =
             description:
                 'How often launched FUEL physically scores, regardless of HUB state.',
             validation:
-                'MR% = Total Fuel Scored (Any HUB State) / Total Fuel Shots Attempted',
+                'MR% = Total Fuel Scored (Any HUB State) / Estimated Total Fuel Attempted',
         },
     },
     {
@@ -111,12 +111,12 @@ const ANALYSIS_FORMULA_OVERVIEW = [
     'Teleop Tower: L1=10, L2=20, L3=30',
     'Valid Points = Auto Fuel + Teleop Active Fuel + Auto Tower + Teleop Tower',
     'Impact = 1.5×Auto Fuel + 1.0×Teleop Active Fuel + Auto Tower + Teleop Tower',
-    'MR% = Fuel Scored (Any HUB State) / Fuel Shots Attempted',
+    'MR% = Fuel Scored (Any HUB State) / Estimated Fuel Attempted',
     'SR% = Fuel Scored in Active HUB / Fuel Scored in Any HUB State',
     'TR% = Successful Climbs / Attempted Climbs',
     'RP Thresholds: Active Fuel 100 (Energized), 360 (Supercharged), Tower 50 (Traversal)',
     'Fuel totals use bucket/cycle estimates from scouting entries and synced pit profiles when pit-managed fields are missing.',
-    'If Fuel Shots Attempted is left at 0, MR% falls back to cycle-based fuel estimates.',
+    'MR% uses cycle-based fuel attempt estimates calibrated by pit scouting.',
 ];
 const TOP_COMPARISON_TEAM_LIMIT = 8;
 const COMPARE_ROUTE_TEAM_LIMIT = 6;
@@ -1098,7 +1098,7 @@ export default function AnalysisTab() {
                                             <StatCard
                                                 label="Mechanical Reliability %"
                                                 value={`${selectedTeamStats.mechanicalReliabilityPct.toFixed(0)}%`}
-                                                info="Fuel scored (any HUB state) divided by total fuel shots attempted."
+                                                info="Fuel scored (any HUB state) divided by estimated total fuel attempted from cycles and pit scouting."
                                             />
                                         </View>
                                         <View style={{ minWidth: 145, flex: 1 }}>

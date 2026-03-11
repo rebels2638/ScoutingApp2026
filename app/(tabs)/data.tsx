@@ -12,6 +12,10 @@ import { Text } from '@/components/ui/Text';
 import { findMatchingAssignment } from '@/lib/backend/assignments';
 import { useBackendAuth } from '@/lib/backend/auth';
 import { getCachedPitProfiles, type PitTeamProfile } from '@/lib/backend/pitScouting';
+import { removeQueuedScoutingSubmissions, submitScoutingEntryWithQueue } from '@/lib/backend/submissions';
+import { usePendingAssignments } from '@/lib/backend/usePendingAssignments';
+import { CameraView, useCameraPermissions, type BarcodeScanningResult, type CameraMountError } from '@/lib/camera';
+import { getPublicErrorMessage } from '@/lib/error-utils';
 import {
     buildPitProfileMap,
     getPitProfileForEntry,
@@ -20,10 +24,6 @@ import {
     getResolvedTypicalFuelCarried,
     getResolvedUsesTrenchRoutes,
 } from '@/lib/pitScoutingOverlay';
-import { removeQueuedScoutingSubmissions, submitScoutingEntryWithQueue } from '@/lib/backend/submissions';
-import { usePendingAssignments } from '@/lib/backend/usePendingAssignments';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult, type CameraMountError } from '@/lib/camera';
-import { getPublicErrorMessage } from '@/lib/error-utils';
 import {
     parseScoutingEntryQrPayload,
     prepareScoutingEntryQrExport,
@@ -311,21 +311,6 @@ export default function DataTab() {
             });
     }, [entries, filterMatchType, normalizedQuery, sortBy]);
 
-    const syncCounts = useMemo(
-        () =>
-            entries.reduce<Record<ScoutingEntrySyncStatus, number>>(
-                (counts, entry) => {
-                    counts[getEntrySyncStatus(entry)] += 1;
-                    return counts;
-                },
-                {
-                    local: 0,
-                    queued: 0,
-                    synced: 0,
-                }
-            ),
-        [entries]
-    );
     const selectedEntryPitProfile = useMemo(
         () => (selectedEntry ? getPitProfileForEntry(selectedEntry, pitProfilesByTeam) : null),
         [pitProfilesByTeam, selectedEntry]
@@ -551,9 +536,6 @@ export default function DataTab() {
 
                     {isBackendEnabled ? (
                         <ManualUploadCard
-                            localCount={syncCounts.local}
-                            queuedCount={syncCounts.queued}
-                            syncedCount={syncCounts.synced}
                             selectedCount={uploadableSelectedEntries.length}
                             canUploadSelected={uploadableSelectedEntries.length > 0}
                             isUploadingSelected={isUploadingSelected}
@@ -683,9 +665,6 @@ function DataOverviewCard({
 }
 
 interface ManualUploadCardProps {
-    localCount: number;
-    queuedCount: number;
-    syncedCount: number;
     selectedCount: number;
     canUploadSelected: boolean;
     isUploadingSelected: boolean;
@@ -694,9 +673,6 @@ interface ManualUploadCardProps {
 }
 
 function ManualUploadCard({
-    localCount,
-    queuedCount,
-    syncedCount,
     selectedCount,
     canUploadSelected,
     isUploadingSelected,
@@ -718,12 +694,6 @@ function ManualUploadCard({
             </CardHeader>
 
             <CardContent className="gap-3">
-                <View className="flex-row flex-wrap gap-2">
-                    <SyncStatusPill status="local" label={`${localCount} local`} />
-                    <SyncStatusPill status="queued" label={`${queuedCount} queued`} />
-                    <SyncStatusPill status="synced" label={`${syncedCount} synced`} />
-                </View>
-
                 <Text className="text-sm font-medium">
                     {selectedCount > 0
                         ? `${formatEntryCount(selectedCount)} selected for upload`
@@ -1120,7 +1090,6 @@ function EntryDetailModal({
                         <DetailSection title="Teleop">
                             <DetailRow label="Scoring Cycles (Active)" value={String(teleop.scoringCyclesActive)} />
                             <DetailRow label="Wasted Cycles (Inactive)" value={String(teleop.wastedCyclesInactive)} />
-                            <DetailRow label="Fuel Shots Attempted" value={String(teleop.fuelShotsAttempted ?? 0)} />
                             <DetailRow label="Typical Fuel Carried" value={typicalFuelCarried ?? '—'} />
                             <DetailRow label="Primary Fuel Source" value={primaryFuelSource ?? '—'} />
                             <DetailRow

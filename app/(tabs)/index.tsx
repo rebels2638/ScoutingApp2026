@@ -110,7 +110,7 @@ export default function ScoutTab() {
                 void handleSubmit();
             }}
             onReset={handleReset}
-            submitLabel="Save Data!"
+            submitLabel="Save Data"
             submittingLabel="Saving..."
             bottomPadding={bottomPadding}
             headerContent={

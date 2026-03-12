@@ -185,7 +185,7 @@ function AboutAppCard() {
     const modalScale = useSharedValue(0.96);
     const modalOpacity = useSharedValue(0);
     const appName = Constants.expoConfig?.name ?? 'Agath';
-    const appVersion = Constants.expoConfig?.version ?? '0.6.0';
+    const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
     useEffect(() => {
         if (open) {

@@ -34,7 +34,6 @@ interface UIScaleProviderProps {
 
 export function UIScaleProvider({ children }: UIScaleProviderProps) {
     const [scaleOption, setScaleOptionState] = React.useState<UIScaleOption>('default');
-    const [isLoaded, setIsLoaded] = React.useState(false);
 
     React.useEffect(() => {
         const load = async () => {
@@ -45,8 +44,6 @@ export function UIScaleProvider({ children }: UIScaleProviderProps) {
                 }
             } catch (error) {
                 console.warn('Failed to load UI scale:', error);
-            } finally {
-                setIsLoaded(true);
             }
         };
         load();
@@ -72,10 +69,6 @@ export function UIScaleProvider({ children }: UIScaleProviderProps) {
         () => ({ scaleOption, scale, setScaleOption, scaled }),
         [scaleOption, scale, setScaleOption, scaled]
     );
-
-    if (!isLoaded) {
-        return null;
-    }
 
     return (
         <UIScaleContext.Provider value={value}>

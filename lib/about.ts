@@ -11,7 +11,6 @@ export interface OpenSourceNotice {
 
 export const APP_DESCRIPTION = 'A scouting app designed for the FRC 2026 game, Rebuilt.';
 export const APP_TEAM_NAME = 'Built by FRC Team 2638';
-export const APP_TEAM_PHOTO_SOURCE = require('../assets/images/team-photo.png');
 export const APP_REPOSITORY_URL = 'https://github.com/rebels2638/ScoutingApp2026';
 export const APP_ISSUES_URL = 'https://github.com/rebels2638/ScoutingApp2026/issues';
 export const APP_LICENSE_NAME = 'GNU GPL v3.0';
@@ -24,7 +23,7 @@ export const APP_DEVELOPERS: AboutDeveloper[] = [
         role: 'Lead Developer',
         url: 'https://github.com/EthanDevCode',
     },
-];
+]; 
 
 export const OPEN_SOURCE_PACKAGES: OpenSourceNotice[] = [
     { name: '@expo/vector-icons', license: 'MIT' },

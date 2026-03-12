@@ -9,6 +9,7 @@ import { AppState, LogBox, Platform, useWindowDimensions } from 'react-native';
 import 'react-native-reanimated';
 import '../global.css';
 
+import { AppStartupScreen } from '@/components/ui/AppStartupScreen';
 import { BackendAuthProvider, useBackendAuth } from '@/lib/backend/auth';
 import { BACKEND_AUTO_SYNC_INTERVAL_MS, requestBackendSyncNow } from '@/lib/backend/sync';
 import { ThemeProvider, ThemedStatusBar, useTheme } from '@/lib/theme';
@@ -69,21 +70,21 @@ function RootLayoutNav() {
     const { navigationTheme } = useTheme();
     const { isBootstrapping } = useBackendAuth();
 
-    if (isBootstrapping) {
-        return null;
-    }
-
     return (
         <NavigationThemeProvider value={navigationTheme}>
             <BackendAutoSyncManager />
             <ResponsiveOrientationManager />
             <ThemedStatusBar />
-            <Stack>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="compare" options={{ headerShown: false, presentation: 'card' }} />
-                <Stack.Screen name="connect" options={{ headerShown: false }} />
-                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-            </Stack>
+            {isBootstrapping ? (
+                <AppStartupScreen />
+            ) : (
+                <Stack>
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="compare" options={{ headerShown: false, presentation: 'card' }} />
+                    <Stack.Screen name="connect" options={{ headerShown: false }} />
+                    <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                </Stack>
+            )}
         </NavigationThemeProvider>
     );
 }

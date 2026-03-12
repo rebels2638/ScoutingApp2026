@@ -11,7 +11,6 @@ import {
     APP_LICENSE_URL,
     APP_REPOSITORY_URL,
     APP_TEAM_NAME,
-    APP_TEAM_PHOTO_SOURCE,
     OPEN_SOURCE_PACKAGES,
 } from '@/lib/about';
 import { springConfigs, timingConfigs } from '@/lib/animations';
@@ -40,7 +39,7 @@ import {
 import Constants from 'expo-constants';
 import { Check, FlaskConical, FolderOpen, Info, Moon, Smartphone, Sun, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarMetrics } from './_layout';
@@ -293,16 +292,6 @@ function AboutAppCard() {
                                     }}
                                     className="overflow-hidden rounded-xl"
                                 >
-                                    <Image
-                                        source={APP_TEAM_PHOTO_SOURCE}
-                                        resizeMode="cover"
-                                        style={{
-                                            backgroundColor: theme.colors.secondary,
-                                            height: scaled(180),
-                                            width: '100%',
-                                        }}
-                                    />
-
                                     <View className="gap-3 p-4">
                                         <View className="gap-1">
                                             <Text className="text-lg font-semibold">{appName} v{appVersion}</Text>

@@ -1,7 +1,6 @@
-import { DarkTheme, DefaultTheme, type Theme as NavigationTheme } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DarkTheme, DefaultTheme, type Theme as NavigationTheme } from '@react-navigation/native';
 import * as React from 'react';
-import { useColorScheme } from 'react-native';
 import { darkTheme, themes, type Theme } from './themes';
 
 const THEME_STORAGE_KEY = '@agath/theme';
@@ -41,9 +40,7 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children, defaultTheme = 'dark' }: ThemeProviderProps) {
-    const systemColorScheme = useColorScheme();
     const [themeName, setThemeName] = React.useState(defaultTheme);
-    const [isLoaded, setIsLoaded] = React.useState(false);
 
     React.useEffect(() => {
         const loadTheme = async () => {
@@ -54,8 +51,6 @@ export function ThemeProvider({ children, defaultTheme = 'dark' }: ThemeProvider
                 }
             } catch (error) {
                 console.warn('Failed to load theme:', error);
-            } finally {
-                setIsLoaded(true);
             }
         };
         loadTheme();
@@ -91,10 +86,6 @@ export function ThemeProvider({ children, defaultTheme = 'dark' }: ThemeProvider
         }),
         [theme, themeName, setTheme, toggleTheme, navigationTheme]
     );
-
-    if (!isLoaded) {
-        return null;
-    }
 
     return (
         <ThemeContext.Provider value={value}>

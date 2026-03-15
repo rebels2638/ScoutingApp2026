@@ -39,7 +39,7 @@ import {
 import Constants from 'expo-constants';
 import { Check, FlaskConical, FolderOpen, Info, Moon, Smartphone, Sun, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarMetrics } from './_layout';
@@ -180,12 +180,15 @@ function AboutSection({ title, description, action, children }: AboutSectionProp
 function AboutAppCard() {
     const { theme } = useTheme();
     const { scaled } = useUIScale();
+    const { height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
     const [open, setOpen] = useState(false);
     const [showOpenSource, setShowOpenSource] = useState(false);
     const modalScale = useSharedValue(0.96);
     const modalOpacity = useSharedValue(0);
     const appName = Constants.expoConfig?.name ?? 'Agath';
     const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+    const modalMaxHeight = Math.max(320, windowHeight - insets.top - insets.bottom - 24);
 
     useEffect(() => {
         if (open) {
@@ -253,7 +256,7 @@ function AboutAppCard() {
                                 borderWidth: 1,
                                 width: '100%',
                                 maxWidth: 720,
-                                maxHeight: '94%',
+                                maxHeight: modalMaxHeight,
                             },
                             modalAnimatedStyle,
                         ]}

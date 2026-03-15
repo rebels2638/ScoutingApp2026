@@ -12,7 +12,7 @@
       "backgroundColor": "#09090b"
     },
     "ios": {
-      "buildNumber": "8001",
+      "buildNumber": "1",
       "bundleIdentifier": "com.reidf.2638scout",
       "supportsTablet": true,
       "requireFullScreen": true,

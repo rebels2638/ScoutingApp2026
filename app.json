@@ -2,7 +2,7 @@
   "expo": {
     "name": "Agath",
     "slug": "Agath",
-    "version": "8.0.0",
+    "version": "8.0.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "agath",
@@ -12,10 +12,12 @@
       "backgroundColor": "#09090b"
     },
     "ios": {
+      "buildNumber": "8001",
       "supportsTablet": true,
       "requireFullScreen": true
     },
     "android": {
+      "versionCode": 8001,
       "package": "com.rebelrobotics.scoutingapp2024",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",

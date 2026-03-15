@@ -13,8 +13,12 @@
     },
     "ios": {
       "buildNumber": "8001",
+      "bundleIdentifier": "com.reidf.2638scout",
       "supportsTablet": true,
-      "requireFullScreen": true
+      "requireFullScreen": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "versionCode": 8001,
@@ -50,7 +54,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "e89a3071-4c7e-40d9-8595-68d0e5a6a12a"
+      }
+    },
+    "owner": "thereidfleish"
   }
 }

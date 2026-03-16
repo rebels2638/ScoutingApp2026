@@ -143,44 +143,18 @@ jobs:
             - name: Prebuild Android project
               run: npx expo prebuild --platform android --no-install
 
-            - name: Remove Android release signing
-              run: |
-                  python <<'EOF'
-                  from pathlib import Path
-
-                  path = Path("android/app/build.gradle")
-                  lines = path.read_text().splitlines()
-                  output = []
-                  in_release = False
-                  release_depth = 0
-
-                  for line in lines:
-                      stripped = line.strip()
-
-                      if stripped == "release {":
-                          in_release = True
-                          release_depth = line.count("{") - line.count("}")
-                          output.append(line)
-                          continue
-
-                      if in_release:
-                          release_depth += line.count("{") - line.count("}")
-                          if stripped.startswith("signingConfig"):
-                              continue
-                          if release_depth == 0:
-                              in_release = False
-
-                      output.append(line)
-
-                  path.write_text("\n".join(output) + "\n")
-                  EOF
-
-            - name: Build unsigned Android APK
+            - name: Build signed Android APK
               run: |
                   cd android
                   chmod +x gradlew
                   ./gradlew --no-daemon --parallel --build-cache :app:assembleRelease -x lint -x test
-                  cp app/build/outputs/apk/release/app-release-unsigned.apk ../agath.apk
+                  APK_PATH="app/build/outputs/apk/release/app-release.apk"
+                  if [[ ! -f "$APK_PATH" ]]; then
+                      echo "Signed APK not found at $APK_PATH" >&2
+                      ls -la app/build/outputs/apk/release || true
+                      exit 1
+                  fi
+                  cp "$APK_PATH" ../agath.apk
 
             - name: Upload Android artifact
               uses: actions/upload-artifact@v7

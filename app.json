@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "versionCode": 8001,
+      "versionCode": 2,
       "package": "com.rebelrobotics.scoutingapp2024",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",

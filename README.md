@@ -1,6 +1,9 @@
 <div align="center">
     <h1><img src="assets/images/icon.png" height="30" align="absmiddle"> Agath</h1>
     <p>A scouting app designed for the FRC 2026 game, Rebuilt.</p>
+    <a href="https://play.google.com/store/apps/details?id=com.rebelrobotics.scoutingapp2024">
+        <img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="60">
+    </a>
 </div>
 
 ## Introduction

@@ -14,7 +14,7 @@ on:
                 default: com.reidf.2638scout
                 type: string
             build_ios:
-                description: Build iOS artifact in addition to Android.
+                description: Build unsigned iOS IPA artifact.
                 required: true
                 default: false
                 type: boolean

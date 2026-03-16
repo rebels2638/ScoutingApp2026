@@ -13,6 +13,16 @@ on:
                 required: true
                 default: com.reidf.2638scout
                 type: string
+            build_ios:
+                description: Build iOS artifact in addition to Android.
+                required: true
+                default: false
+                type: boolean
+            run_validation:
+                description: Run TypeScript and Expo config validation before builds.
+                required: true
+                default: false
+                type: boolean
 
 permissions:
     contents: read
@@ -28,6 +38,7 @@ env:
 jobs:
     validate:
         name: Validate config
+        if: ${{ inputs.run_validation }}
         runs-on: ubuntu-24.04
         timeout-minutes: 20
         steps:
@@ -52,7 +63,6 @@ jobs:
     build-android:
         name: Build Android
         runs-on: ubuntu-24.04
-        needs: validate
         timeout-minutes: 45
         env:
             ANDROID_APPLICATION_ID: ${{ inputs.android_application_id }}
@@ -104,10 +114,12 @@ jobs:
                   echo "$(dirname "$SDKMANAGER_PATH")" >> "$GITHUB_PATH"
                   echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
 
-                  set +o pipefail
-                  yes | "$SDKMANAGER_PATH" --licenses >/dev/null
-                  set -o pipefail
-                  "$SDKMANAGER_PATH" --install "platform-tools" >/dev/null
+                  if [[ ! -x "$SDK_ROOT/platform-tools/adb" ]]; then
+                      set +o pipefail
+                      yes | "$SDKMANAGER_PATH" --licenses >/dev/null
+                      set -o pipefail
+                      "$SDKMANAGER_PATH" --install "platform-tools" >/dev/null
+                  fi
 
             - name: Install dependencies
               run: npm ci --prefer-offline --no-audit
@@ -129,7 +141,7 @@ jobs:
                   EOF
 
             - name: Prebuild Android project
-              run: npx expo prebuild --platform android --no-install --non-interactive
+              run: npx expo prebuild --platform android --no-install
 
             - name: Remove Android release signing
               run: |
@@ -167,7 +179,7 @@ jobs:
               run: |
                   cd android
                   chmod +x gradlew
-                  ./gradlew --no-daemon --parallel --build-cache assembleRelease
+                  ./gradlew --no-daemon --parallel --build-cache --configuration-cache :app:assembleRelease -x lint -x test
                   cp app/build/outputs/apk/release/app-release-unsigned.apk ../agath.apk
 
             - name: Upload Android artifact
@@ -188,8 +200,8 @@ jobs:
 
     build-ios:
         name: Build iOS
+        if: ${{ inputs.build_ios }}
         runs-on: macos-15
-        needs: validate
         timeout-minutes: 60
         env:
             IOS_BUNDLE_IDENTIFIER: ${{ inputs.ios_bundle_identifier }}
@@ -232,7 +244,7 @@ jobs:
                   EOF
 
             - name: Prebuild iOS project
-              run: npx expo prebuild --platform ios --no-install --non-interactive
+              run: npx expo prebuild --platform ios --no-install
 
             - name: Install CocoaPods
               run: pod install --project-directory=ios

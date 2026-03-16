@@ -84,6 +84,8 @@ xcuserdata/
 # Android
 .gradle
 local.properties
+android/local.properties
+android/keystore.properties
 *.out
 .native-debug-symbols/
 

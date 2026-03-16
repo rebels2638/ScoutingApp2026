@@ -179,7 +179,7 @@ jobs:
               run: |
                   cd android
                   chmod +x gradlew
-                  ./gradlew --no-daemon --parallel --build-cache --configuration-cache :app:assembleRelease -x lint -x test
+                  ./gradlew --no-daemon --parallel --build-cache :app:assembleRelease -x lint -x test
                   cp app/build/outputs/apk/release/app-release-unsigned.apk ../agath.apk
 
             - name: Upload Android artifact

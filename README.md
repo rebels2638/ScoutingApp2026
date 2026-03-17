@@ -11,8 +11,6 @@
 
 Agath is a mobile FRC scouting application built with React Native and Expo. It allows scouts to record robot data during autonomous, teleop, and endgame phases, then sync that data to a backend server or transfer it offline via QR codes. The app is built for [FRC Team 2638](https://github.com/rebels2638) but is open-source and any team may fork and adjust the code accordingly.
 
-*App is pending review on the Apple App Store.*
-
 ## Screenshots
 
 *Coming soon.*

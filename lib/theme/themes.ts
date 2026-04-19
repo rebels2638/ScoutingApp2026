@@ -119,7 +119,7 @@ export const darkTheme: Theme = {
         accentForeground: '#FAFAFA',
 
         destructive: '#EF4444',
-        destructiveForeground: '#FAFAFA',
+        destructiveForeground: '#18181B',
 
         border: '#27272A',
         input: '#27272A',
@@ -195,26 +195,26 @@ export const solarizedDarkTheme: Theme = {
         cardForeground: '#93A1A1',
 
         primary: '#268BD2',
-        primaryForeground: '#FDF6E3',
+        primaryForeground: '#000000',
 
         secondary: '#073642',
-        secondaryForeground: '#839496',
+        secondaryForeground: '#93A1A1',
 
         muted: '#073642',
-        mutedForeground: '#657B83',
+        mutedForeground: '#93A1A1',
 
         accent: '#2AA198',
-        accentForeground: '#FDF6E3',
+        accentForeground: '#002B36',
 
         destructive: '#DC322F',
-        destructiveForeground: '#FDF6E3',
+        destructiveForeground: '#FFFFFF',
 
         border: '#073642',
         input: '#073642',
         ring: '#268BD2',
 
         secondaryElevated: '#0A4A5C',
-        secondaryElevatedForeground: '#93A1A1',
+        secondaryElevatedForeground: '#C1CDCD',
 
         allianceRed: '#DC322F',
         allianceRedMuted: '#5F1A19',
@@ -239,19 +239,19 @@ export const solarizedLightTheme: Theme = {
         cardForeground: '#073642',
 
         primary: '#268BD2',
-        primaryForeground: '#FDF6E3',
+        primaryForeground: '#000000',
 
         secondary: '#EEE8D5',
         secondaryForeground: '#073642',
 
         muted: '#E0DAC9',
-        mutedForeground: '#586E75',
+        mutedForeground: '#475B63',
 
         accent: '#2AA198',
-        accentForeground: '#FDF6E3',
+        accentForeground: '#000000',
 
         destructive: '#DC322F',
-        destructiveForeground: '#FDF6E3',
+        destructiveForeground: '#FFFFFF',
 
         border: '#D3CBBB',
         input: '#D3CBBB',
@@ -295,7 +295,7 @@ export const nordTheme: Theme = {
         accentForeground: '#2E3440',
 
         destructive: '#BF616A',
-        destructiveForeground: '#ECEFF4',
+        destructiveForeground: '#000000',
 
         border: '#4C566A',
         input: '#4C566A',
@@ -333,13 +333,13 @@ export const draculaTheme: Theme = {
         secondaryForeground: '#F8F8F2',
 
         muted: '#44475A',
-        mutedForeground: '#6272A4',
+        mutedForeground: '#A8B6E5',
 
         accent: '#FF79C6',
         accentForeground: '#282A36',
 
         destructive: '#FF5555',
-        destructiveForeground: '#F8F8F2',
+        destructiveForeground: '#282A36',
 
         border: '#6272A4',
         input: '#44475A',
@@ -383,7 +383,7 @@ export const githubDarkTheme: Theme = {
         accentForeground: '#FFFFFF',
 
         destructive: '#F85149',
-        destructiveForeground: '#FFFFFF',
+        destructiveForeground: '#0D1117',
 
         border: '#30363D',
         input: '#21262D',
@@ -421,13 +421,13 @@ export const monokaiTheme: Theme = {
         secondaryForeground: '#F8F8F2',
 
         muted: '#3E3D32',
-        mutedForeground: '#75715E',
+        mutedForeground: '#B7B39E',
 
         accent: '#E6DB74',
         accentForeground: '#272822',
 
         destructive: '#F92672',
-        destructiveForeground: '#F8F8F2',
+        destructiveForeground: '#000000',
 
         border: '#49483E',
         input: '#3E3D32',
@@ -465,20 +465,20 @@ export const oneDarkTheme: Theme = {
         secondaryForeground: '#ABB2BF',
 
         muted: '#3E4451',
-        mutedForeground: '#5C6370',
+        mutedForeground: '#C0C6D4',
 
         accent: '#C678DD',
         accentForeground: '#282C34',
 
         destructive: '#E06C75',
-        destructiveForeground: '#282C34',
+        destructiveForeground: '#111318',
 
         border: '#3E4451',
         input: '#3E4451',
         ring: '#61AFEF',
 
         secondaryElevated: '#545862',
-        secondaryElevatedForeground: '#ABB2BF',
+        secondaryElevatedForeground: '#E2E6EF',
 
         allianceRed: '#E06C75',
         allianceRedMuted: '#5C2E32',
@@ -492,16 +492,196 @@ export const oneDarkTheme: Theme = {
     animations: defaultAnimations,
 };
 
+export const tokyoNightTheme: Theme = {
+    name: 'Tokyo Night',
+    isDark: true,
+    colors: {
+        background: '#1A1B26',
+        foreground: '#C0CAF5',
+
+        card: '#1F2335',
+        cardForeground: '#C0CAF5',
+
+        primary: '#7AA2F7',
+        primaryForeground: '#1A1B26',
+
+        secondary: '#24283B',
+        secondaryForeground: '#C0CAF5',
+
+        muted: '#24283B',
+        mutedForeground: '#A9B1D6',
+
+        accent: '#BB9AF7',
+        accentForeground: '#1A1B26',
+
+        destructive: '#F7768E',
+        destructiveForeground: '#1A1B26',
+
+        border: '#414868',
+        input: '#414868',
+        ring: '#7AA2F7',
+
+        secondaryElevated: '#2F3549',
+        secondaryElevatedForeground: '#C0CAF5',
+
+        allianceRed: '#F7768E',
+        allianceRedMuted: '#4C2430',
+        allianceRedForeground: '#FFD6DE',
+        allianceBlue: '#7AA2F7',
+        allianceBlueMuted: '#243150',
+        allianceBlueForeground: '#DDE7FF',
+    },
+    spacing: defaultSpacing,
+    radii: defaultRadii,
+    animations: defaultAnimations,
+};
+
+export const forestNightTheme: Theme = {
+    name: 'Forest Night',
+    isDark: true,
+    colors: {
+        background: '#232A2E',
+        foreground: '#D3C6AA',
+
+        card: '#2D353B',
+        cardForeground: '#D3C6AA',
+
+        primary: '#A7C080',
+        primaryForeground: '#1F2428',
+
+        secondary: '#343F44',
+        secondaryForeground: '#D3C6AA',
+
+        muted: '#343F44',
+        mutedForeground: '#B9C0AB',
+
+        accent: '#7FBBB3',
+        accentForeground: '#1F2428',
+
+        destructive: '#E67E80',
+        destructiveForeground: '#1F2428',
+
+        border: '#4F585E',
+        input: '#4F585E',
+        ring: '#A7C080',
+
+        secondaryElevated: '#434E55',
+        secondaryElevatedForeground: '#E4D8C0',
+
+        allianceRed: '#E67E80',
+        allianceRedMuted: '#4D2B2D',
+        allianceRedForeground: '#F8D4D4',
+        allianceBlue: '#7FBBB3',
+        allianceBlueMuted: '#274248',
+        allianceBlueForeground: '#D1ECE8',
+    },
+    spacing: defaultSpacing,
+    radii: defaultRadii,
+    animations: defaultAnimations,
+};
+
+export const rosePineDawnTheme: Theme = {
+    name: 'Rose Pine Dawn',
+    isDark: false,
+    colors: {
+        background: '#FAF4ED',
+        foreground: '#575279',
+
+        card: '#FFF9F2',
+        cardForeground: '#575279',
+
+        primary: '#286983',
+        primaryForeground: '#FFFFFF',
+
+        secondary: '#F2E9E1',
+        secondaryForeground: '#575279',
+
+        muted: '#E9DFD6',
+        mutedForeground: '#5A5672',
+
+        accent: '#D7827E',
+        accentForeground: '#2A273F',
+
+        destructive: '#B4637A',
+        destructiveForeground: '#000000',
+
+        border: '#D2C6BC',
+        input: '#D2C6BC',
+        ring: '#286983',
+
+        secondaryElevated: '#E0D5CC',
+        secondaryElevatedForeground: '#575279',
+
+        allianceRed: '#B4637A',
+        allianceRedMuted: '#F6D8DF',
+        allianceRedForeground: '#7A2848',
+        allianceBlue: '#286983',
+        allianceBlueMuted: '#D8E7ED',
+        allianceBlueForeground: '#174356',
+    },
+    spacing: defaultSpacing,
+    radii: defaultRadii,
+    animations: defaultAnimations,
+};
+
+export const catppuccinLatteTheme: Theme = {
+    name: 'Catppuccin Latte',
+    isDark: false,
+    colors: {
+        background: '#EFF1F5',
+        foreground: '#4C4F69',
+
+        card: '#E6E9EF',
+        cardForeground: '#4C4F69',
+
+        primary: '#1E66F5',
+        primaryForeground: '#FFFFFF',
+
+        secondary: '#DCE0E8',
+        secondaryForeground: '#4C4F69',
+
+        muted: '#CCD0DA',
+        mutedForeground: '#55586E',
+
+        accent: '#8839EF',
+        accentForeground: '#FFFFFF',
+
+        destructive: '#D20F39',
+        destructiveForeground: '#FFFFFF',
+
+        border: '#BCC0CC',
+        input: '#BCC0CC',
+        ring: '#1E66F5',
+
+        secondaryElevated: '#C6CAD6',
+        secondaryElevatedForeground: '#3E405A',
+
+        allianceRed: '#D20F39',
+        allianceRedMuted: '#F6D9DF',
+        allianceRedForeground: '#8F0526',
+        allianceBlue: '#1E66F5',
+        allianceBlueMuted: '#DCE6FF',
+        allianceBlueForeground: '#1A4AA5',
+    },
+    spacing: defaultSpacing,
+    radii: defaultRadii,
+    animations: defaultAnimations,
+};
+
 export const themes: Record<string, Theme> = {
     dark: { ...darkTheme, name: 'Dark' },
     light: lightTheme,
     'solarized-dark': solarizedDarkTheme,
     'solarized-light': solarizedLightTheme,
+    'rose-pine-dawn': rosePineDawnTheme,
+    'catppuccin-latte': catppuccinLatteTheme,
     nord: nordTheme,
     dracula: draculaTheme,
     'github-dark': githubDarkTheme,
     monokai: monokaiTheme,
     'one-dark': oneDarkTheme,
+    'tokyo-night': tokyoNightTheme,
+    'forest-night': forestNightTheme,
 };
 
 export function composeTheme(base: Theme, overrides: Partial<Theme>): Theme {

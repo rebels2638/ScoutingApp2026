@@ -141,9 +141,9 @@ export const inactivePhaseDefinitions: Record<string, FieldDefinition> = {
         validation: 'Yes/No',
     },
     collectsFromNeutralZone: {
-        label: 'Inactive: Collects/Hoards from Neutral Zone',
-        description: 'Uses inactive time to collect/prep FUEL.',
-        validation: 'Yes/No',
+        label: 'Inactive: Collects Neutral Fuel (Keeps for Next Active)',
+        description: 'Collects FUEL from neutral areas and keeps it for this robot\'s next active window.',
+        validation: 'Yes/No (collects and keeps neutral fuel, not feeding to alliance zone)',
     },
     playsDefense: {
         label: 'Inactive: Plays Defense',

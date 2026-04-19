@@ -33,7 +33,7 @@ export const InactivePhaseSection: React.FC<InactivePhaseSectionProps> = ({
             />
 
             <FormToggleField
-                label="Collects/Hoards from Neutral Zone"
+                label="Collects Neutral Fuel (Keeps It)"
                 definition={inactivePhaseDefinitions.collectsFromNeutralZone}
                 checked={data.collectsFromNeutralZone}
                 onCheckedChange={(checked) => onChange({ ...data, collectsFromNeutralZone: checked })}

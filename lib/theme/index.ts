@@ -1,25 +1,3 @@
-export { ThemeProvider, useTheme, useThemeAnimations, useThemeColors } from './ThemeProvider';
-export {
-    ThemedScrollView,
-    ThemedStatusBar,
-    ThemedView,
-} from './ThemedComponents';
-export {
-    composeTheme,
-    darkTheme,
-    draculaTheme,
-    githubDarkTheme,
-    lightTheme,
-    monokaiTheme,
-    nordTheme,
-    oneDarkTheme,
-    solarizedDarkTheme,
-    solarizedLightTheme,
-    themes,
-    type Theme,
-    type ThemeAnimations,
-    type ThemeColors,
-} from './themes';
 export {
     darkenColor,
     ensureContrast,
@@ -31,5 +9,32 @@ export {
     lightenColor,
     meetsWcagAA,
     mixColors,
-    rgbToHex,
+    rgbToHex
 } from './contrast';
+export {
+    ThemedScrollView,
+    ThemedStatusBar,
+    ThemedView
+} from './ThemedComponents';
+export { ThemeProvider, useTheme, useThemeAnimations, useThemeColors } from './ThemeProvider';
+export {
+    catppuccinLatteTheme,
+    composeTheme,
+    darkTheme,
+    draculaTheme,
+    forestNightTheme,
+    githubDarkTheme,
+    lightTheme,
+    monokaiTheme,
+    nordTheme,
+    oneDarkTheme,
+    rosePineDawnTheme,
+    solarizedDarkTheme,
+    solarizedLightTheme,
+    themes,
+    tokyoNightTheme,
+    type Theme,
+    type ThemeAnimations,
+    type ThemeColors
+} from './themes';
+

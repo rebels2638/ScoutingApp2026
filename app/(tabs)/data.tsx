@@ -1331,7 +1331,7 @@ function EntryDetailModal({
                                 value={inactivePhase.feedsFuelToAllianceZone ? 'Yes' : 'No'}
                             />
                             <DetailRow
-                                label="Collects from Neutral Zone"
+                                label="Collects Neutral Fuel (Keeps It)"
                                 value={inactivePhase.collectsFromNeutralZone ? 'Yes' : 'No'}
                             />
                             <DetailRow label="Plays Defense" value={inactivePhase.playsDefense ? 'Yes' : 'No'} />

@@ -76,6 +76,8 @@ export interface ScoutingEntry {
     timestamp: number;
     syncStatus?: ScoutingEntrySyncStatus;
     syncedAt?: number | null;
+    assignmentId?: string | null;
+    correctionRevision?: number | null;
     matchMetadata: MatchMetadata;
     autonomous: AutonomousData;
     teleop: TeleopData;

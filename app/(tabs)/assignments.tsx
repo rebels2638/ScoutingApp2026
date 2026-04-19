@@ -186,6 +186,8 @@ export default function AssignmentsTab() {
             const entry: ScoutingEntry = {
                 id: generateId(),
                 timestamp: Date.now(),
+                assignmentId: matchingAssignment.id,
+                correctionRevision: 0,
                 ...entryData,
             };
 

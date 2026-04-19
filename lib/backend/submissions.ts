@@ -20,6 +20,7 @@ interface ScoutingSubmissionPayload {
     submitted_at: string;
     data: string;
     assignment_id?: string;
+    correction_revision?: number;
     device_id?: string;
 }
 
@@ -206,6 +207,14 @@ async function buildScoutingSubmissionPayload({
     const trimmedAssignmentId = assignmentId?.trim();
     if (trimmedAssignmentId) {
         payload.assignment_id = trimmedAssignmentId;
+    }
+
+    if (
+        typeof entry.correctionRevision === 'number' &&
+        Number.isFinite(entry.correctionRevision) &&
+        entry.correctionRevision >= 0
+    ) {
+        payload.correction_revision = Math.trunc(entry.correctionRevision);
     }
 
     const deviceId = await getInstallUuid();

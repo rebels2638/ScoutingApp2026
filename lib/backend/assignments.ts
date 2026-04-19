@@ -284,3 +284,28 @@ export async function completeAssignmentForSubmission({
     await markAssignmentCompleted(match.id);
     return true;
 }
+
+export async function findAssignmentIdForUser(
+    userId: string,
+    candidate: AssignmentMatchCandidate
+): Promise<string | null> {
+    const normalizedUserId = userId.trim();
+    if (!normalizedUserId) {
+        return null;
+    }
+
+    const config = requireBackendConfig();
+    const response = await getAppwriteDatabases().listDocuments<AssignmentDocument>({
+        databaseId: config.databaseId,
+        collectionId: config.collectionAssignmentsId,
+        queries: [
+            Query.equal('key_id', normalizedUserId),
+            Query.orderDesc('$updatedAt'),
+            Query.limit(100),
+        ],
+    });
+
+    const assignments = response.documents.map(mapPendingAssignment);
+    const match = findMatchingAssignment(assignments, candidate);
+    return match?.id ?? null;
+}

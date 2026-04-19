@@ -74,6 +74,7 @@ export const InfoButton: React.FC<InfoButtonProps> = ({
                 visible={open}
                 transparent
                 animationType="fade"
+                presentationStyle="overFullScreen"
                 onRequestClose={() => setOpen(false)}
             >
                 <Pressable

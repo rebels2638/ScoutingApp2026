@@ -34,6 +34,13 @@ function isNullableBoolean(value: unknown): value is boolean | null {
     return value === null || typeof value === 'boolean';
 }
 
+function isNullableNonNegativeInteger(value: unknown): value is number | null {
+    return (
+        value === null ||
+        (typeof value === 'number' && Number.isFinite(value) && value >= 0 && Number.isInteger(value))
+    );
+}
+
 function isScoutingEntrySyncStatus(value: unknown): value is ScoutingEntrySyncStatus {
     return value === 'local' || value === 'queued' || value === 'synced';
 }
@@ -41,6 +48,20 @@ function isScoutingEntrySyncStatus(value: unknown): value is ScoutingEntrySyncSt
 function normalizeScoutingEntry(entry: ScoutingEntry): ScoutingEntry {
     const syncStatus = isScoutingEntrySyncStatus(entry.syncStatus) ? entry.syncStatus : 'local';
     const syncedAt = syncStatus === 'synced' && isFiniteNumber(entry.syncedAt) ? entry.syncedAt : null;
+    const assignmentId =
+        typeof entry.assignmentId === 'string'
+            ? (entry.assignmentId.trim().length > 0 ? entry.assignmentId.trim() : null)
+            : entry.assignmentId === null
+                ? null
+                : undefined;
+    const correctionRevision =
+        typeof entry.correctionRevision === 'number' &&
+        Number.isFinite(entry.correctionRevision) &&
+        entry.correctionRevision >= 0
+            ? Math.trunc(entry.correctionRevision)
+            : entry.correctionRevision === null
+                ? null
+                : undefined;
 
     return {
         ...entry,
@@ -54,6 +75,8 @@ function normalizeScoutingEntry(entry: ScoutingEntry): ScoutingEntry {
         },
         syncStatus,
         syncedAt,
+        assignmentId,
+        correctionRevision,
     };
 }
 
@@ -63,7 +86,9 @@ function isScoutingEntry(value: unknown): value is ScoutingEntry {
         typeof value.id !== 'string' ||
         !isFiniteNumber(value.timestamp) ||
         (value.syncStatus !== undefined && !isScoutingEntrySyncStatus(value.syncStatus)) ||
-        (value.syncedAt !== undefined && !isNullableFiniteNumber(value.syncedAt))
+        (value.syncedAt !== undefined && !isNullableFiniteNumber(value.syncedAt)) ||
+        (value.assignmentId !== undefined && !isNullableString(value.assignmentId)) ||
+        (value.correctionRevision !== undefined && !isNullableNonNegativeInteger(value.correctionRevision))
     ) {
         return false;
     }

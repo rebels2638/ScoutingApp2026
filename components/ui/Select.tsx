@@ -219,6 +219,7 @@ export function Select<T extends string>({
                 visible={modalVisible}
                 transparent
                 animationType="none"
+                presentationStyle="overFullScreen"
                 onRequestClose={closeModal}
                 statusBarTranslucent
             >

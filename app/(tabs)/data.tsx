@@ -4,13 +4,15 @@ import { Alert, InteractionManager, Linking, Modal, Pressable, RefreshControl, u
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 
+import { ScoutingForm } from '@/components/scouting/ScoutingForm';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Text } from '@/components/ui/Text';
-import { findMatchingAssignment } from '@/lib/backend/assignments';
+import { findAssignmentIdForUser, findMatchingAssignment } from '@/lib/backend/assignments';
 import { useBackendAuth } from '@/lib/backend/auth';
+import { getBackendConfig } from '@/lib/backend/config';
 import { getCachedPitProfiles, type PitTeamProfile } from '@/lib/backend/pitScouting';
 import { removeQueuedScoutingSubmissions, submitScoutingEntryWithQueue } from '@/lib/backend/submissions';
 import { usePendingAssignments } from '@/lib/backend/usePendingAssignments';
@@ -30,10 +32,12 @@ import {
     QR_COMMENTS_OMITTED_MESSAGE,
     type ScoutingEntryQrImportResult,
 } from '@/lib/qrTransfer';
+import { createScoutingFormDataFromEntry, useScoutingFormState } from '@/lib/scoutingForm';
 import {
     clearAllScoutingEntries,
     deleteScoutingEntry,
     getScoutingEntries,
+    updateScoutingEntry,
     upsertScoutingEntry,
 } from '@/lib/storage';
 import { ThemedScrollView, ThemedView, useThemeColors } from '@/lib/theme';
@@ -43,6 +47,7 @@ import {
     Camera,
     Database,
     Eye,
+    Pencil,
     QrCode,
     RefreshCw,
     Trash2,
@@ -85,6 +90,15 @@ function isEntryUploadable(entry: ScoutingEntry): boolean {
     return getEntrySyncStatus(entry) === 'local';
 }
 
+function getNormalizedAssignmentId(value: string | null | undefined): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
 function formatEntryCount(count: number): string {
     return `${count} ${count === 1 ? 'entry' : 'entries'}`;
 }
@@ -93,6 +107,7 @@ export default function DataTab() {
     const colors = useThemeColors();
     const { authState, isBackendAvailable, userId } = useBackendAuth();
     const isBackendEnabled = authState === 'authenticated' && !!userId;
+    const isPitScoutingEnabled = isBackendEnabled && !!getBackendConfig()?.collectionPitScoutingId;
     const { assignments: pendingAssignments, refreshAssignments } = usePendingAssignments({
         enabled: isBackendEnabled,
         userId,
@@ -107,11 +122,22 @@ export default function DataTab() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
     const [isUploadingSelected, setIsUploadingSelected] = useState(false);
+    const [editingEntry, setEditingEntry] = useState<ScoutingEntry | null>(null);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
     const [isQrScannerVisible, setIsQrScannerVisible] = useState(false);
     const [qrExportState, setQrExportState] = useState<QrExportModalState | null>(null);
     const [exportingQrEntryId, setExportingQrEntryId] = useState<string | null>(null);
     const pendingQrExportTaskRef = React.useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
     const isBackendEnabledRef = React.useRef(isBackendEnabled);
+    const {
+        formData: editFormData,
+        setFormData: setEditFormData,
+        isPitDataPending: isEditPitDataPending,
+        resetForm: resetEditForm,
+        prepareFormData: prepareEditFormData,
+    } = useScoutingFormState({
+        isPitScoutingEnabled,
+    });
     const pitProfilesByTeam = useMemo(() => buildPitProfileMap(pitProfiles), [pitProfiles]);
 
     const loadEntries = useCallback(async () => {
@@ -185,6 +211,99 @@ export default function DataTab() {
             clearPendingQrExportTask();
         };
     }, [clearPendingQrExportTask]);
+
+    React.useEffect(() => {
+        if (!editingEntry) {
+            return;
+        }
+
+        resetEditForm(createScoutingFormDataFromEntry(editingEntry));
+    }, [editingEntry, resetEditForm]);
+
+    const startEditingEntry = useCallback((entry: ScoutingEntry) => {
+        clearSelection();
+        setSelectedEntry(null);
+        setEditingEntry(entry);
+    }, [clearSelection]);
+
+    const cancelEditingEntry = useCallback(() => {
+        if (!editingEntry || isSavingEdit) {
+            return;
+        }
+
+        Alert.alert(
+            'Discard changes?',
+            'Your edits to this scouting entry will be discarded.',
+            [
+                { text: 'Keep editing', style: 'cancel' },
+                {
+                    text: 'Discard',
+                    style: 'destructive',
+                    onPress: () => {
+                        setEditingEntry(null);
+                    },
+                },
+            ]
+        );
+    }, [editingEntry, isSavingEdit]);
+
+    const saveEditedEntry = useCallback(async () => {
+        if (!editingEntry) {
+            return;
+        }
+
+        if (editFormData.matchMetadata.matchNumber < 1) {
+            Alert.alert('Validation Error', 'Please enter a valid match number.');
+            return;
+        }
+
+        if (editFormData.matchMetadata.teamNumber < 1) {
+            Alert.alert('Validation Error', 'Please enter a valid team number.');
+            return;
+        }
+
+        setIsSavingEdit(true);
+        try {
+            const preparedData = prepareEditFormData();
+            const previousStatus = getEntrySyncStatus(editingEntry);
+            const currentRevision =
+                typeof editingEntry.correctionRevision === 'number' &&
+                Number.isFinite(editingEntry.correctionRevision) &&
+                editingEntry.correctionRevision >= 0
+                    ? Math.trunc(editingEntry.correctionRevision)
+                    : 0;
+            const nextRevision =
+                previousStatus === 'queued' || previousStatus === 'synced'
+                    ? currentRevision + 1
+                    : currentRevision;
+            const updatedEntry: ScoutingEntry = {
+                ...editingEntry,
+                ...preparedData,
+                timestamp: Date.now(),
+                syncStatus: 'local',
+                syncedAt: null,
+                assignmentId: getNormalizedAssignmentId(editingEntry.assignmentId),
+                correctionRevision: nextRevision,
+            };
+
+            await removeQueuedScoutingSubmissions([editingEntry.id]);
+            await updateScoutingEntry(updatedEntry);
+            setEditingEntry(null);
+            await loadEntries();
+
+            Alert.alert(
+                'Entry updated',
+                previousStatus === 'queued' || previousStatus === 'synced'
+                    ? 'The corrected scouting entry is now Local and ready to upload again from this tab.'
+                    : 'The scouting entry was updated.'
+            );
+        } catch (error) {
+            console.error('Error updating scouting entry:', error);
+            Alert.alert('Update failed', 'Failed to save your edits. Please try again.');
+        } finally {
+            setIsSavingEdit(false);
+        }
+    }, [editFormData.matchMetadata.matchNumber, editFormData.matchMetadata.teamNumber, editingEntry, loadEntries, prepareEditFormData]);
 
     const toggleEntrySelection = useCallback((entry: ScoutingEntry) => {
         if (!isBackendEnabled || !isEntryUploadable(entry)) {
@@ -337,6 +456,39 @@ export default function DataTab() {
         { label: 'Team Number', value: 'team' as const },
     ];
 
+    const resolveAssignmentIdForUpload = useCallback(async (
+        entry: ScoutingEntry,
+        keyId: string,
+        availableAssignments: typeof pendingAssignments,
+        resolvedAssignmentBySlot: Map<string, string | null>
+    ): Promise<string | null> => {
+        const existingAssignmentId = getNormalizedAssignmentId(entry.assignmentId);
+        if (existingAssignmentId) {
+            return existingAssignmentId;
+        }
+
+        const matchingAssignment = findMatchingAssignment(availableAssignments, entry.matchMetadata);
+        if (matchingAssignment) {
+            const matchingAssignmentIndex = availableAssignments.findIndex(
+                (assignment) => assignment.id === matchingAssignment.id
+            );
+            if (matchingAssignmentIndex >= 0) {
+                availableAssignments.splice(matchingAssignmentIndex, 1);
+            }
+
+            return matchingAssignment.id;
+        }
+
+        const slotKey = `${entry.matchMetadata.matchNumber}-${entry.matchMetadata.teamNumber}-${entry.matchMetadata.matchType}`;
+        if (resolvedAssignmentBySlot.has(slotKey)) {
+            return resolvedAssignmentBySlot.get(slotKey) ?? null;
+        }
+
+        const resolvedAssignmentId = await findAssignmentIdForUser(keyId, entry.matchMetadata);
+        resolvedAssignmentBySlot.set(slotKey, resolvedAssignmentId);
+        return resolvedAssignmentId;
+    }, []);
+
     const uploadSelectedEntries = async () => {
         if (!userId) {
             Alert.alert('Backend mode required', 'Enable backend mode in Settings before uploading entries.');
@@ -346,28 +498,31 @@ export default function DataTab() {
         setIsUploadingSelected(true);
         try {
             const availableAssignments = [...pendingAssignments];
+            const resolvedAssignmentBySlot = new Map<string, string | null>();
             let uploadedCount = 0;
             let queuedCount = 0;
             let skippedCount = 0;
             let failedCount = 0;
 
             for (const entry of uploadableSelectedEntries) {
-                const matchingAssignment = findMatchingAssignment(availableAssignments, entry.matchMetadata);
-                const assignmentId = matchingAssignment?.id;
+                const assignmentId = await resolveAssignmentIdForUpload(
+                    entry,
+                    userId,
+                    availableAssignments,
+                    resolvedAssignmentBySlot
+                );
 
-                if (matchingAssignment) {
-                    const matchingAssignmentIndex = availableAssignments.findIndex(
-                        (assignment) => assignment.id === matchingAssignment.id
-                    );
-                    if (matchingAssignmentIndex >= 0) {
-                        availableAssignments.splice(matchingAssignmentIndex, 1);
-                    }
+                if (assignmentId && !getNormalizedAssignmentId(entry.assignmentId)) {
+                    await updateScoutingEntry({
+                        ...entry,
+                        assignmentId,
+                    });
                 }
 
                 const result = await submitScoutingEntryWithQueue({
                     keyId: userId,
                     entry,
-                    assignmentId,
+                    assignmentId: assignmentId ?? undefined,
                 });
 
                 if (result.status === 'uploaded') {
@@ -438,7 +593,7 @@ export default function DataTab() {
 
         Alert.alert(
             'Upload selected entries',
-            `Upload ${formatEntryCount(uploadableSelectedEntries.length)}? Each record can only be queued or uploaded once.`,
+            `Upload ${formatEntryCount(uploadableSelectedEntries.length)}? Edited records are allowed and will resync as corrected data.`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -516,6 +671,36 @@ export default function DataTab() {
 
     const bottomPadding = tabBarHeight + Math.max(insets.bottom, tabBarMarginBottom) + 16;
 
+    if (editingEntry) {
+        return (
+            <ScoutingForm
+                formData={editFormData}
+                onFormDataChange={setEditFormData}
+                isPitScoutingEnabled={isPitScoutingEnabled}
+                isPitDataPending={isEditPitDataPending}
+                isSubmitting={isSavingEdit}
+                onSubmit={() => {
+                    void saveEditedEntry();
+                }}
+                onReset={cancelEditingEntry}
+                submitLabel="Save Changes"
+                submittingLabel="Saving..."
+                resetLabel="Back to Data"
+                bottomPadding={bottomPadding}
+                headerContent={
+                    <Card variant="outline">
+                        <CardHeader className="flex-col items-start gap-1 pb-2">
+                            <CardTitle className="text-base">Edit Scouting Entry</CardTitle>
+                            <Text className="text-sm" style={{ color: colors.mutedForeground }}>
+                                Team {editingEntry.matchMetadata.teamNumber} • {editingEntry.matchMetadata.matchType} Match {editingEntry.matchMetadata.matchNumber}
+                            </Text>
+                        </CardHeader>
+                    </Card>
+                }
+            />
+        );
+    }
+
     return (
         <ThemedView className="flex-1" style={{ paddingTop: insets.top }}>
             <ThemedScrollView
@@ -573,6 +758,7 @@ export default function DataTab() {
                                     onPress={() => handleEntryPress(entry)}
                                     onLongPress={() => handleEntryLongPress(entry)}
                                     onView={() => setSelectedEntry(entry)}
+                                    onEdit={() => startEditingEntry(entry)}
                                     onDelete={() => handleDelete(entry)}
                                 />
                             ))}
@@ -587,6 +773,7 @@ export default function DataTab() {
                 canExportQr={!isBackendEnabled}
                 isExportingQr={selectedEntry?.id === exportingQrEntryId}
                 onExportQr={handleExportQr}
+                onEdit={startEditingEntry}
                 onClose={() => setSelectedEntry(null)}
             />
             <QrImportScannerModal
@@ -689,7 +876,7 @@ function ManualUploadCard({
             <CardHeader className="flex-col items-start gap-1 pb-2">
                 <CardTitle className="text-base">Manual Upload</CardTitle>
                 <Text className="text-sm" style={{ color: colors.mutedForeground }}>
-                    Hold a local entry to select it. You may only upload a scouting record once per, if you make a mistake and have already uploaded contact a leader. DO NOT UPLOAD A REMADE VERSION OF A RECORD.
+                    Hold a Local entry to select it for upload. If you edit a synced record, Agath marks it Local again so you can upload a corrected version.
                 </Text>
             </CardHeader>
 
@@ -852,6 +1039,7 @@ interface EntryCardProps {
     onPress: () => void;
     onLongPress: () => void;
     onView: () => void;
+    onEdit: () => void;
     onDelete: () => void;
 }
 
@@ -863,6 +1051,7 @@ function EntryCard({
     onPress,
     onLongPress,
     onView,
+    onEdit,
     onDelete,
 }: EntryCardProps) {
     const colors = useThemeColors();
@@ -957,6 +1146,9 @@ function EntryCard({
                             <Button variant="outline" size="icon" onPress={onView} accessibilityLabel="View entry details">
                                 <Eye size={scaled(14)} color={colors.foreground} />
                             </Button>
+                            <Button variant="outline" size="icon" onPress={onEdit} accessibilityLabel="Edit entry">
+                                <Pencil size={scaled(14)} color={colors.foreground} />
+                            </Button>
                             <Button variant="destructive" size="icon" onPress={onDelete} accessibilityLabel="Delete entry">
                                 <Trash2 size={scaled(14)} color={colors.destructiveForeground} />
                             </Button>
@@ -999,6 +1191,7 @@ interface EntryDetailModalProps {
     canExportQr: boolean;
     isExportingQr: boolean;
     onExportQr: (entry: ScoutingEntry) => void;
+    onEdit: (entry: ScoutingEntry) => void;
     onClose: () => void;
 }
 
@@ -1008,6 +1201,7 @@ function EntryDetailModal({
     canExportQr,
     isExportingQr,
     onExportQr,
+    onEdit,
     onClose,
 }: EntryDetailModalProps) {
     const colors = useThemeColors();
@@ -1027,7 +1221,7 @@ function EntryDetailModal({
         <Modal
             visible={!!entry}
             animationType="slide"
-            presentationStyle="pageSheet"
+            presentationStyle="fullScreen"
             onRequestClose={onClose}
         >
             <ThemedView className="flex-1">
@@ -1053,6 +1247,15 @@ function EntryDetailModal({
                                 </View>
                             </Button>
                         ) : null}
+
+                        <Button variant="outline" size="sm" onPress={() => onEdit(entry)}>
+                            <View className="flex-row items-center gap-1.5">
+                                <Pencil size={scaled(14)} color={colors.foreground} />
+                                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
+                                    Edit
+                                </Text>
+                            </View>
+                        </Button>
 
                         <Button variant="outline" size="icon" onPress={onClose} className={stackLayout ? 'self-start' : ''}>
                             <X size={scaled(18)} color={colors.foreground} />
@@ -1386,7 +1589,7 @@ function QrExportModal({
         <Modal
             visible={!!exportState}
             animationType="slide"
-            presentationStyle="pageSheet"
+            presentationStyle="fullScreen"
             onRequestClose={onClose}
         >
             <ThemedView className="flex-1">

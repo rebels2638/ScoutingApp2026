@@ -98,6 +98,30 @@ export function createScoutingFormDataFromAssignment(
     return nextFormData;
 }
 
+export function createScoutingFormDataFromEntry(entry: ScoutingEntry): ScoutingFormData {
+    return {
+        matchMetadata: {
+            ...entry.matchMetadata,
+        },
+        autonomous: {
+            ...entry.autonomous,
+        },
+        teleop: {
+            ...entry.teleop,
+        },
+        activePhase: {
+            ...entry.activePhase,
+        },
+        inactivePhase: {
+            ...entry.inactivePhase,
+        },
+        endgame: {
+            ...entry.endgame,
+            cards: [...entry.endgame.cards],
+        },
+    };
+}
+
 function resolveBaseFormData(initialData?: ScoutingFormData): ScoutingFormData {
     if (!initialData) {
         return createDefaultScoutingEntry();

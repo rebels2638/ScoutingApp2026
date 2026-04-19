@@ -244,6 +244,7 @@ function AboutAppCard() {
                 visible={open}
                 transparent
                 animationType="fade"
+                presentationStyle="overFullScreen"
                 onRequestClose={() => setOpen(false)}
             >
                 <View className="flex-1 items-center justify-center bg-black/60 px-4 py-6">
